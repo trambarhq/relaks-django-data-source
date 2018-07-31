@@ -1,10 +1,6 @@
 module.exports = function(React, PropTypes) {
 
-if (process.env.NODE_ENV !== 'production' && PropTypes) {
-    RelaksDjangoDataSource.propTypes = {
-        onChange: PropTypes.func.isRequired,
-    }
-}
+var prototype = Object.create(React.Component.prototype);
 
 /**
  * Set initial state of component
@@ -15,9 +11,17 @@ function RelaksDjangoDataSource() {
     this.state = { requests: this.requests };
 }
 
-var prototype = Object.create(React.Component.prototype);
-
 prototype.constructor = RelaksDjangoDataSource;
+prototype.constructor.prototype = prototype;
+
+if (process.env.NODE_ENV !== 'production' && PropTypes) {
+    prototype.constructor.propTypes = {
+        onChange: PropTypes.func.isRequired,
+    }
+}
+if (process.env.INCLUDE_DISPLAY_NAME) {
+    prototype.constructor.displayName = 'RelaksDjangoDataSource';
+}
 
 /**
  * Don't render anything
@@ -52,7 +56,7 @@ prototype.triggerChangeEvent = function() {
  * @return {Promise<Object>}
  */
 prototype.fetchOne = function(url) {
-    return this.fetch(url);
+    return this.fetch(url, true);
 };
 
 /**
@@ -68,7 +72,7 @@ prototype.fetchOne = function(url) {
  *
  * @return {Promise<Array>}
  */
-prototype.fetchList= function(url, options) {
+prototype.fetchList = function(url, options) {
     var _this = this;
     var page = (options && options.page !== undefined) ? options.page : 0;
     if (page) {
@@ -97,7 +101,7 @@ prototype.fetchList= function(url, options) {
                     // append retrieved objects to list
                     var results = previousResults.concat(response.results);
                     var promise = Promise.resolve(results);
-                    _this.updateRequest(request, { results, promise });
+                    _this.updateRequest(request, { results: results, promise: promise });
 
                     // attach function to results so caller can ask for more results
                     results.more = fetchNextPage;
@@ -142,7 +146,7 @@ prototype.fetchMultiple = function(urls, options) {
     var results = {};
     var cached = 0;
     var promises = urls.map(function(url) {
-        var request = _this.findRequest({ url, list: false });
+        var request = _this.findRequest({ url: url, list: false });
         if (request && request.result) {
             results[url] = request.result;
             cached++;
@@ -167,7 +171,11 @@ prototype.fetchMultiple = function(urls, options) {
     var partial = (options && options.partial !== undefined) ? options.partial : false;
     var minimum;
     if (typeof(partial) === 'number') {
-        minimum = urls.length * partial;
+        if (partial < 1.0) {
+            minimum = urls.length * partial;
+        } else {
+            minimum = partial;
+        }
     } else if (partial) {
         minimum = 1;
     } else {
@@ -190,13 +198,17 @@ prototype.fetchMultiple = function(urls, options) {
  * Fetch JSON object at URL
  *
  * @param  {String} url
+ * @param  {Boolean|undefined} checkDir
  *
  * @return {Promise<Object>}
  */
-prototype.fetch = function(url) {
+prototype.fetch = function(url, checkDir) {
     var _this = this;
     var props = { url: url, list: false };
     var request = this.findRequest(props);
+    if (!request && checkDir) {
+        request = this.deriveRequest(props);
+    }
     if (!request) {
         request = this.addRequest(props)
         request.promise = fetch(url).then(function(response) {
@@ -223,12 +235,49 @@ prototype.findRequest = function(props) {
 };
 
 /**
+ * Derive a request for an item from an existing directory request
+ *
+ * @param  {Object} props
+ *
+ * @return {Object|undefined}
+ */
+prototype.deriveRequest = function(props) {
+    var object;
+    var dirURL = getDirectory(props.url);
+    this.requests.find(function(request) {
+        if (matchURL(request.url, dirURL)) {
+            if (request.result) {
+                var results = request.result.results;
+                if (results instanceof Array) {
+                    object = results.find(function(item) {
+                        return (item.url === props.url);
+                    });
+                    return !!object;
+                }
+            }
+        }
+    });
+    if (object) {
+        var props = {
+            url: props.url,
+            list: false,
+            promise: Promise.resolve(object),
+            result: object
+        };
+        return this.addRequest(props)
+    }
+}
+
+/**
  * Add a request
  *
  * @param {Object} props
  */
 prototype.addRequest = function(props) {
-    var request = Object.assign({ promise: null }, props);
+    var request = { propmise: null };
+    for (var name in props) {
+        request[name] = props[name];
+    }
     this.requests = [ request ].concat(this.requests);
     this.setState({ requests: this.requests });
     return request;
@@ -241,13 +290,14 @@ prototype.addRequest = function(props) {
  * @param  {Object} props
  */
 prototype.updateRequest = function(request, props) {
-    Object.assign(request, props);
+    for (var name in props) {
+        request[name] = props[name];
+    }
     this.requests = this.requests.slice();
     this.setState({ requests: this.requests });
 };
 
-RelaksDjangoDataSource.prototype = prototype;
-return RelaksDjangoDataSource;
+return prototype.constructor;
 };
 
 function match(request, props) {
@@ -267,4 +317,22 @@ function appendPage(url, page) {
         var sep = (qi === -1) ? '?' : '&';
         return url + sep + 'page=' + page;
     }
+}
+
+function getDirectory(url) {
+    var ei = url.lastIndexOf('/');
+    if (ei === url.length - 1) {
+        ei = url.lastIndexOf('/', ei - 1);
+    }
+    if (ei !== -1) {
+        return url.substr(0, ei + 1);
+    }
+}
+
+function matchURL(url1, url2) {
+    var qi = url1.lastIndexOf('?');
+    if (qi !== -1) {
+        url1 = url1.substr(0, qi);
+    }
+    return (url1 === url2);
 }
