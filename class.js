@@ -1,8 +1,5 @@
 module.exports = function(React, PropTypes) {
 
-RelaksDjangoDataSource.prototype = Object.create(React.Component.prototype);
-RelaksDjangoDataSource.prototype.constructor = RelaksDjangoDataSource;
-
 if (process.env.NODE_ENV !== 'production' && PropTypes) {
     RelaksDjangoDataSource.propTypes = {
         onChange: PropTypes.func.isRequired,
@@ -13,36 +10,37 @@ if (process.env.NODE_ENV !== 'production' && PropTypes) {
  * Set initial state of component
  */
 function RelaksDjangoDataSource() {
-    var _this = this;
-    React.Component.call(_this);
-    _this.requests = [];
-    _this.state = { requests: _this.requests };
+    React.Component.call(this);
+    this.requests = [];
+    this.state = { requests: this.requests };
 }
+
+var prototype = Object.create(React.Component.prototype);
+
+prototype.constructor = RelaksDjangoDataSource;
 
 /**
  * Don't render anything
  *
  * @return {null}
  */
-RelaksDjangoDataSource.prototype.render = function() {
+prototype.render = function() {
     return null;
 };
 
 /**
  * Trigger onChange on mount
  */
-RelaksDjangoDataSource.prototype.componentDidMount = function() {
-    var _this = this;
-    _this.triggerChangeEvent();
+prototype.componentDidMount = function() {
+    this.triggerChangeEvent();
 };
 
 /**
  * Call the onChange handler
  */
-RelaksDjangoDataSource.prototype.triggerChangeEvent = function() {
-    var _this = this;
-    if (_this.props.onChange) {
-        _this.props.onChange({ type: 'change', target: _this });
+prototype.triggerChangeEvent = function() {
+    if (this.props.onChange) {
+        this.props.onChange({ type: 'change', target: this });
     }
 };
 
@@ -53,9 +51,8 @@ RelaksDjangoDataSource.prototype.triggerChangeEvent = function() {
  *
  * @return {Promise<Object>}
  */
-RelaksDjangoDataSource.prototype.fetchOne = function(url) {
-    var _this = this;
-    return _this.fetch(url);
+prototype.fetchOne = function(url) {
+    return this.fetch(url);
 };
 
 /**
@@ -71,21 +68,21 @@ RelaksDjangoDataSource.prototype.fetchOne = function(url) {
  *
  * @return {Promise<Array>}
  */
-RelaksDjangoDataSource.prototype.fetchList= function(url, options) {
+prototype.fetchList= function(url, options) {
     var _this = this;
     var page = (options && options.page !== undefined) ? options.page : 0;
     if (page) {
         // fetch a page if page number is specified
         url = appendPage(url, page);
-        return _this.fetch(url).then(function(response) {
+        return this.fetch(url).then(function(response) {
             return response.results;
         });
     } else {
         // fetch pages on demand, concatenating them
         var props = { url: url, list: true };
-        var request = _this.findRequest(props);
+        var request = this.findRequest(props);
         if (!request) {
-            request = _this.addRequest(props)
+            request = this.addRequest(props)
 
             // create fetch function
             var nextURL = url;
@@ -139,7 +136,7 @@ RelaksDjangoDataSource.prototype.fetchList= function(url, options) {
  *
  * @return {Promise<Object>}
  */
-RelaksDjangoDataSource.prototype.fetchMultiple = function(urls, options) {
+prototype.fetchMultiple = function(urls, options) {
     // see which ones are cached already
     var _this = this;
     var results = {};
@@ -196,12 +193,12 @@ RelaksDjangoDataSource.prototype.fetchMultiple = function(urls, options) {
  *
  * @return {Promise<Object>}
  */
-RelaksDjangoDataSource.prototype.fetch = function(url) {
+prototype.fetch = function(url) {
     var _this = this;
     var props = { url: url, list: false };
-    var request = _this.findRequest(props);
+    var request = this.findRequest(props);
     if (!request) {
-        request = _this.addRequest(props)
+        request = this.addRequest(props)
         request.promise = fetch(url).then(function(response) {
             return response.json().then(function(result) {
                 _this.updateRequest(request, { result: result });
@@ -219,9 +216,8 @@ RelaksDjangoDataSource.prototype.fetch = function(url) {
  *
  * @return {Object|undefined}
  */
-RelaksDjangoDataSource.prototype.findRequest = function(props) {
-    var _this = this;
-    return _this.requests.find(function(request) {
+prototype.findRequest = function(props) {
+    return this.requests.find(function(request) {
         return match(request, props);
     });
 };
@@ -231,11 +227,10 @@ RelaksDjangoDataSource.prototype.findRequest = function(props) {
  *
  * @param {Object} props
  */
-RelaksDjangoDataSource.prototype.addRequest = function(props) {
-    var _this = this;
+prototype.addRequest = function(props) {
     var request = Object.assign({ promise: null }, props);
-    _this.requests = [ request ].concat(_this.requests);
-    _this.setState({ requests: _this.requests });
+    this.requests = [ request ].concat(this.requests);
+    this.setState({ requests: this.requests });
     return request;
 };
 
@@ -245,13 +240,13 @@ RelaksDjangoDataSource.prototype.addRequest = function(props) {
  * @param  {Object} request
  * @param  {Object} props
  */
-RelaksDjangoDataSource.prototype.updateRequest = function(request, props) {
-    var _this = this;
+prototype.updateRequest = function(request, props) {
     Object.assign(request, props);
-    _this.requests = _this.requests.slice();
-    _this.setState({ requests: _this.requests });
+    this.requests = this.requests.slice();
+    this.setState({ requests: this.requests });
 };
 
+RelaksDjangoDataSource.prototype = prototype;
 return RelaksDjangoDataSource;
 };
 
