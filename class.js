@@ -8,7 +8,11 @@ var prototype = Object.create(React.Component.prototype);
 function RelaksDjangoDataSource() {
     React.Component.call(this);
     this.requests = [];
-    this.state = { requests: this.requests };
+    this.authentications = [];
+    this.state = {
+        requests: this.requests,
+        authentications: this.authentications,
+    };
 }
 
 prototype.constructor = RelaksDjangoDataSource;
@@ -19,7 +23,11 @@ if (process.env.NODE_ENV !== 'production') {
         let propTypes = require('prop-types');
 
         prototype.constructor.propTypes = {
-            onChange: PropTypes.func.isRequired,
+            baseURL: PropTypes.func,
+            refreshInterval: PropTypes.number,
+
+            onChange: PropTypes.func,
+            onAuthentication: PropTypes.func,
         }
     } catch (err) {
     }
@@ -42,6 +50,27 @@ prototype.render = function() {
  */
 prototype.componentDidMount = function() {
     this.triggerChangeEvent();
+    this.scheduleExpirationCheck(!!this.props.refreshInterval);
+};
+
+/**
+ * Enable or disable expiration check
+ *
+ * @param  {[type]} nextProps
+ *
+ * @return {[type]}
+ */
+prototype.componentWillReceiveProps = function(nextProps) {
+    if (this.props.refreshInterval !== nextProps.refreshInterval) {
+        this.scheduleExpirationCheck(!!nextProps.refreshInterval);
+    }
+};
+
+/**
+ * Stop expiration checks on unmount
+ */
+prototype.componentWillUnmount = function() {
+    this.scheduleExpirationCheck(false);
 };
 
 /**
@@ -73,14 +102,18 @@ prototype.fetchOne = function(url, options) {
         request = this.deriveRequest(props);
     }
     if (!request) {
-        request = this.addRequest(props)
+        request = props;
         request.promise = this.fetch(url).then(function(response) {
             var object = response;
-            _this.updateRequest(request, { object: object });
+            _this.updateRequest(request, {
+                object: object,
+                retrievalTime: getTime(),
+            });
             return object;
         });
+        this.addRequest(request);
     } else if (request.dirty)  {
-        console.log('Reading dirty result set');
+        this.refreshOne(request);
     }
     return request.promise;
 };
@@ -104,19 +137,19 @@ prototype.fetchPage = function(url, page, options) {
     };
     var request = this.findRequest(props);
     if (!request) {
-        if (page > 1) {
-            var qi = url.indexOf('?');
-            var sep = (qi === -1) ? '?' : '&';
-            url += sep + 'page=' + page;
-        }
-        request = this.addRequest(props)
-        request.promise = this.fetch(url).then(function(response) {
+        var pageURL = attachPageNumber(url, page);
+        request = props;
+        request.promise = this.fetch(pageURL).then(function(response) {
             var objects = response.results;
-            _this.updateRequest(request, { objects: objects });
+            _this.updateRequest(request, {
+                objects: objects,
+                retrievalTime: getTime(),
+            });
             return objects;
         });
+        this.addRequest(request)
     } else if (request.dirty)  {
-        console.log('Reading dirty result set');
+        this.refreshPage(request);
     }
     return request.promise
 };
@@ -138,58 +171,88 @@ prototype.fetchList = function(url, options) {
     };
     var request = this.findRequest(props);
     if (!request) {
-        request = this.addRequest(props)
-
-        // create fetch function
-        var nextURL = url;
-        var previousResults = [];
-        var currentPage = 1;
-        var currentPromise = null;
-        var fetchNextPage = function() {
-            if (currentPromise) {
-                return currentPromise;
-            }
-            currentPromise = _this.fetch(nextURL).then(function(response) {
-                if (response instanceof Array) {
-                    // the full list is returned
-                    var objects = response;
-                    _this.updateRequest(request, { objects: objects });
-                    objects.more = function() {};
-                    return objects;
-                } else if (response instanceof Object) {
-                    // append retrieved objects to list
-                    var objects = previousResults.concat(response.results);
-                    var promise = Promise.resolve(objects)
-                    _this.updateRequest(request, { objects: objects, promise: promise });
-
-                    // attach function to results so caller can ask for more results
-                    objects.more = fetchNextPage;
-
-                    // set up the next call
-                    nextURL = response.next;
-                    previousResults = objects;
-                    currentPromise = (nextURL) ? null : promise;
-
-                    // inform parent component that more data is available
-                    if (currentPage++ > 1) {
-                        _this.triggerChangeEvent();
-                    }
-                    return objects;
-                }
-            }).catch(function(err) {
-                currentPromise = null;
-                throw err;
-            });
-            return currentPromise;
-        };
-
-        // call it for the first page
-        request.promise = fetchNextPage();
+        request = props;
+        request.promise = this.fetchNextPage(request, true);
+        this.addRequest(request);
     } else if (request.dirty)  {
-        console.log('Reading dirty result set');
+        this.refreshList(request);
     }
     return request.promise;
 };
+
+/**
+ * Return what has been fetched. Used by fetchList().
+ *
+ * @param  {Object} request
+ *
+ * @return {Promise<Array>}
+ */
+prototype.fetchNoMore = function(request) {
+    return request.promise;
+};
+
+/**
+ * Initiate fetching of the next page. Used by fetchList().
+ *
+ * @param  {Object} request
+ * @param  {Boolean} initial
+ *
+ * @return {Promise<Array>}
+ */
+prototype.fetchNextPage = function(request, initial) {
+    if (request.nextPromise) {
+        return request.nextPromise;
+    }
+    var _this = this;
+    var nextURL = (initial) ? request.url : request.nextURL;
+    var nextPromise = this.fetch(nextURL).then(function(response) {
+        if (response instanceof Array) {
+            // the full list is returned
+            var objects = response;
+            _this.updateRequest(request, {
+                objects: objects,
+                retrievalTime: getTime(),
+                nextPromise: null,
+            });
+            objects.more = _this.fetchNoMore.bind(_this, request);
+            return objects;
+        } else if (response instanceof Object) {
+            // append retrieved objects to list
+            var objects = appendObjects(request.objects, response.results);
+            _this.updateRequest(request, {
+                objects: objects,
+                promise: nextPromise,
+                retrievalTime: (initial) ? getTime() : request.retrievalTime,
+                nextURL: response.next,
+                nextPage: (request.nextPage || 1) + 1,
+                nextPromise: null,
+            });
+
+            // attach function to results so caller can ask for more results
+            if (request.nextURL) {
+                objects.more = _this.fetchNextPage.bind(_this, request, false);
+            } else {
+                objects.more = _this.fetchNoMore.bind(_this, request);
+            }
+
+            // inform parent component that more data is available
+            if (!initial) {
+                _this.triggerChangeEvent();
+            }
+            return objects;
+        }
+    }).catch(function(err) {
+        if (!initial) {
+            _this.updateRequest(request, { nextPromise: null });
+        }
+        throw err;
+    });
+    if (!initial) {
+        _this.updateRequest(request, { nextPromise });
+    }
+    return nextPromise;
+};
+
 
 /**
  * Fetch multiple JSON objects. If partial is specified, then immediately
@@ -275,6 +338,203 @@ prototype.fetch = function(url) {
 };
 
 /**
+ * Reperform an request for an object, triggering an onChange event if the
+ * object has changed.
+ *
+ * @param  {Object} request
+ */
+prototype.refreshOne = function(request) {
+    if (request.refreshing) {
+        return;
+    }
+    console.log('Refreshing object', request);
+    this.updateRequest(request, { refreshing: true });
+
+    var _this = this;
+    var retrievalTime = getTime();
+    this.fetch(request.url).then(function(response) {
+        var object = response;
+        var changed = true;
+        if (matchObject(object, request.object)) {
+            object = request.object;
+            changed = false;
+        }
+        _this.updateRequest(request, {
+            object: object,
+            promise: Promise.resolve(object),
+            retrievalTime: retrievalTime,
+            refreshing: false,
+            dirty: false,
+        });
+        if (changed) {
+            _this.triggerChangeEvent();
+        }
+    }).catch(function(err) {
+        _this.updateRequest(request, { refreshing: false });
+    });
+};
+
+/**
+ * Reperform an request for a page of objects, triggering an onChange event if
+ * the list is different from the one fetched previously.
+ *
+ * @param  {Object} request
+ */
+prototype.refreshPage = function(request) {
+    if (request.refreshing) {
+        return;
+    }
+    console.log('Refreshing page', request.url);
+    this.updateRequest(request, { refreshing: true });
+
+    var _this = this;
+    var retrievalTime = getTime();
+    var pageURL = attachPageNumber(request.url, request.page);
+    this.fetch(pageURL).then(function(response) {
+        var objects = response.results;
+        var changed = true;
+        if (replaceIdentificalObjects(objects, request.objects)) {
+            objects = request.objects;
+            changed = false;
+        }
+        _this.updateRequest(request, {
+            objects: objects,
+            promise: Promise.resolve(objects),
+            retrievalTime: retrievalTime,
+            refreshing: false,
+            dirty: false,
+        })
+        if (changed) {
+            _this.triggerChangeEvent();
+        }
+    }).catch(function(err) {
+        _this.updateRequest(request, { refreshing: false });
+    });
+};
+
+/**
+ * Reperform an request for a list of objects, triggering an onChange event if
+ * the list is different from the one fetched previously.
+ *
+ * @param  {Object} request
+ */
+prototype.refreshList = function(request) {
+    if (request.refreshing) {
+        return;
+    }
+    console.log('Refreshing list', request.url);
+    this.updateRequest(request, { refreshing: true });
+
+    var _this = this;
+    if (request.nextPage) {
+        // updating paginated list
+        // wait for any call to more() to finish first
+        this.waitForNextPage(request).then(function() {
+            // suppress fetching of additional pages for the time being
+            var oldObjects = request.objects;
+            var morePromise, moreResolve, moreReject;
+            var fetchMoreAfterward = function() {
+                if (!morePromise) {
+                    morePromise = new Promise(function(resolve, reject) {
+                        moreResolve = resolve;
+                        moreReject = reject;
+                    });
+                }
+                return morePromise;
+            };
+            oldObjects.more = fetchMoreAfterward;
+
+            var refreshedObjects;
+            var pageRemaining = request.nextPage - 1;
+            var nextURL = request.url;
+
+            var refreshNextPage = function() {
+                return _this.fetch(nextURL).then(function(response) {
+                    pageRemaining--;
+                    nextURL = response.next;
+                    refreshedObjects = appendObjects(refreshedObjects, response.results);
+                    var objects = joinObjectLists(refreshedObjects, oldObjects);
+                    var changed = true;
+                    objects.more = fetchMoreAfterward;
+                    if (replaceIdentificalObjects(objects, request.objects)) {
+                        objects = request.objects;
+                        changed = false;
+                    }
+                    // set request.nextURL to the URL given by the server
+                    // in the event that new pages have become available
+                    _this.updateRequest(request, {
+                        objects: objects,
+                        promise: Promise.resolve(objects),
+                        nextURL: (pageRemaining === 0) ? nextURL : request.nextURL,
+                    });
+                    if (changed) {
+                        _this.triggerChangeEvent();
+                    }
+                    // keep going until all pages have been updated
+                    if (pageRemaining > 0 && nextURL && request.nextURL !== nextURL) {
+                        return refreshNextPage();
+                    }
+                });
+            };
+
+            var retrievalTime = getTime();
+            refreshNextPage().then(function() {
+                // we're done--reenable fetching of additional pages
+                if (request.nextURL) {
+                    request.objects.more = _this.fetchNextPage.bind(_this, request, false);
+                } else {
+                    request.objects.more = _this.fetchNoMore.bind(_this, request);
+                }
+                // trigger it if more() had been called
+                if (morePromise) {
+                    request.objects.more().then(moreResolve, moreReject);
+                }
+                _this.updateRequest(request, {
+                    retrievalTime: retrievalTime,
+                    refreshing: false,
+                    dirty: false,
+                });
+            }).catch(function(err) {
+                _this.updateRequest(request, { refreshing: false });
+            });
+        });
+    } else {
+        // updating un-paginated list
+        var retrievalTime = getTime();
+        this.fetch(request.url).then(function(response) {
+            var objects = response;
+            var changed = true;
+            if (replaceIdentificalObjects(objects, request.objects)) {
+                objects = request.objects;
+                changed = false;
+            }
+            objects.more = _this.fetchNoMore.bind(this, request);
+            _this.updateRequest(request, {
+                objects: objects,
+                promise: Promise.resolve(objects),
+                retrievalTime: retrievalTime,
+                refreshing: false,
+                dirty: false,
+            });
+            if (changed) {
+                _this.triggerChangeEvent();
+            }
+        }).catch(function(err) {
+            _this.updateRequest(request, { refreshing: false });
+            throw err;
+        });
+    }
+};
+
+prototype.waitForNextPage = function(request) {
+    if (request.nextPromise) {
+        return request.nextPromise;
+    } else {
+        return Promise.resolve();
+    }
+}
+
+/**
  * Insert an object into remote database
  *
  * @param  {String} dirURL
@@ -308,16 +568,23 @@ prototype.insertMultiple = function(dirURL, objects) {
         var requests = _this.requests.filter(function(request) {
             if (request.type === 'page' || request.type === 'list') {
                 if (matchURL(request.url, dirURL)) {
-                    var newObjects = runHook(request, 'afterInsert', insertedObjects);
-                    if (newObjects !== false) {
-                        if (newObjects) {
-                            request.objects = newObjects;
-                            request.promise = Promise.resolve(newObjects);
-                        } else {
-                            // default behavior:
-                            // force reload from server
-                            request.dirty = true;
+                    if (request.objects) {
+                        var newObjects = runHook(request, 'afterInsert', insertedObjects);
+                        if (newObjects !== false) {
+                            if (newObjects) {
+                                request.objects = newObjects;
+                                request.promise = Promise.resolve(newObjects);
+                            } else {
+                                // default behavior:
+                                // force reload from server
+                                request.dirty = true;
+                            }
+                            changed = true;
                         }
+                    } else {
+                        // need to run query again, in case the dataset that's
+                        // currently in flight has already become out-of-date
+                        request.dirty = true;
                         changed = true;
                     }
                 }
@@ -377,31 +644,38 @@ prototype.updateMultiple = function(dirURL, objects) {
         var requests = _this.requests.filter(function(request) {
             if (request.type === 'object') {
                 if (matchDirectoryURL(request.url, dirURL)) {
-                    var updatedObject = findObject(updatedObjects, request.object);
-                    if (updatedObject) {
-                        var newObject = runHook(request, 'afterUpdate', updatedObject);
-                        if (newObject) {
-                            request.object = newObject;
-                        } else {
-                            // default behavior:
-                            // force reload from server
-                            request.dirty = true;
+                    if (request.object) {
+                        var updatedObject = findObject(updatedObjects, request.object);
+                        if (updatedObject) {
+                            var newObject = runHook(request, 'afterUpdate', updatedObject);
+                            if (newObject) {
+                                request.object = newObject;
+                            } else {
+                                // default behavior:
+                                // force reload from server
+                                request.dirty = true;
+                            }
+                            changed = true;
                         }
-                        changed = true;
                     }
                 }
             } else if (request.type === 'page' || request.type === 'list') {
                 if (matchURL(request.url, dirURL)) {
-                    var newObjects = runHook(request, 'afterUpdate', updatedObjects);
-                    if (newObjects !== false) {
-                        if (newObjects) {
-                            request.objects = newObjects;
-                            request.promise = Promise.resolve(newObjects);
-                        } else {
-                            // default behavior:
-                            // force reload from server
-                            request.dirty = true;
+                    if (request.objects) {
+                        var newObjects = runHook(request, 'afterUpdate', updatedObjects);
+                        if (newObjects !== false) {
+                            if (newObjects) {
+                                request.objects = newObjects;
+                                request.promise = Promise.resolve(newObjects);
+                            } else {
+                                // default behavior:
+                                // force reload from server
+                                request.dirty = true;
+                            }
+                            changed = true;
                         }
+                    } else {
+                        request.dirty = true;
                         changed = true;
                     }
                 }
@@ -451,41 +725,51 @@ prototype.deleteMultiple = function(dirURL, objects) {
             if (request.type === 'object') {
                 // remove request
                 if (matchDirectoryURL(request.url, dirURL)) {
-                    var deletedObject = findObject(deletedObjects, request.object);
-                    if (deletedObject) {
-                        var newObject = runHook(request, 'afterDelete', deletedObject);
-                        if (newObject !== false) {
-                            if (newObject) {
-                                request.object = newObject;
-                                request.promise = Promise.resolve(newObject);
-                            } else {
-                                // default behavior:
-                                // remove request from cache
-                                keep = false;
+                    if (request.object) {
+                        var deletedObject = findObject(deletedObjects, request.object);
+                        if (deletedObject) {
+                            var newObject = runHook(request, 'afterDelete', deletedObject);
+                            if (newObject !== false) {
+                                if (newObject) {
+                                    request.object = newObject;
+                                    request.promise = Promise.resolve(newObject);
+                                } else {
+                                    // default behavior:
+                                    // remove request from cache
+                                    keep = false;
+                                }
+                                changed = true;
                             }
-                            changed = true;
                         }
                     }
                 }
             } else if (request.type === 'page' || request.type === 'list') {
                 if (matchURL(request.url, dirURL)) {
-                    var newObjects = runHook(request, 'afterDelete', deletedObjects);
-                    if (newObjects !== false) {
-                        if (!newObjects) {
-                            // default behavior:
-                            // remove matching objects from list
-                            newObjects = request.objects.filter(function(object) {
-                                return findObjectIndex(deletedObjects, object) === -1;
-                            });
-                            if (newObjects.length === request.objects.length) {
-                                newObjects = null;
+                    if (request.objects) {
+                        var newObjects = runHook(request, 'afterDelete', deletedObjects);
+                        if (newObjects !== false) {
+                            if (!newObjects) {
+                                // default behavior:
+                                // remove matching objects from list
+                                newObjects = request.objects.filter(function(object) {
+                                    return findObjectIndex(deletedObjects, object) === -1;
+                                });
+                                if (newObjects.length === request.objects.length) {
+                                    newObjects = null;
+                                }
+                            }
+                            if (newObjects) {
+                                if (request.type === 'list') {
+                                    newObjects.more = request.objects.more;
+                                }
+                                request.objects = newObjects;
+                                request.promise = Promise.resolve(newObjects);
+                                changed = true;
                             }
                         }
-                        if (newObjects) {
-                            request.objects = newObjects;
-                            request.promise = Promise.resolve(newObjects);
-                            changed = true;
-                        }
+                    } else {
+                        request.dirty = true;
+                        changed = true;
                     }
                 }
             }
@@ -557,16 +841,11 @@ prototype.deriveRequest = function(props) {
 /**
  * Add a request
  *
- * @param {Object} props
+ * @param {Object} request
  */
-prototype.addRequest = function(props) {
-    var request = { propmise: null };
-    for (var name in props) {
-        request[name] = props[name];
-    }
+prototype.addRequest = function(request) {
     this.requests = [ request ].concat(this.requests);
     this.setState({ requests: this.requests });
-    return request;
 };
 
 /**
@@ -597,6 +876,65 @@ prototype.updateRequestsIfChanged = function(requests, changed) {
     }
 };
 
+/**
+ * Start or stop expiration checking
+ *
+ * @param  {Boolean} enable
+ */
+prototype.scheduleExpirationCheck = function(enable) {
+    if (enable) {
+        if (!this.expirationCheckInterval) {
+            var _this = this;
+            this.expirationCheckInterval = setInterval(function() {
+                _this.checkExpiration();
+            }, 5000);
+        }
+    } else {
+        if (this.expirationCheckInterval) {
+            this.expirationCheckInterval = clearInterval(this.expirationCheckInterval);
+        }
+    }
+};
+
+/**
+ * Defer expiration checking for a while
+ */
+prototype.rescheduleExpirationCheck = function() {
+    if (this.expirationCheckInterval) {
+        var _this = this;
+        clearInterval(this.expirationCheckInterval);
+        this.expirationCheckInterval = setInterval(function() {
+            _this.checkExpiration();
+        }, 5000);
+    }
+};
+
+/**
+ * Mark requests as dirty and trigger onChange event when enough time has passed
+ */
+prototype.checkExpiration = function() {
+    var interval = Number(this.props.refreshInterval);
+    if (!interval) {
+        return;
+    }
+    var limit = getTime(-interval);
+    var changed = false;
+    var requests = this.requests.filter(function(request) {
+        if (!request.dirty) {
+            if (request.retrievalTime < limit) {
+                request.dirty = true;
+                changed = true;
+            }
+        }
+        return true;
+    });
+    if (changed) {
+        this.requests = requests;
+        this.setState({ requests: requests });
+        this.triggerChangeEvent();
+    }
+};
+
 return prototype.constructor;
 };
 
@@ -605,25 +943,33 @@ function runHook(request, hookName, input) {
     if (!hookFunc) {
         return;
     }
-    if (request.type === 'object') {
-        if (typeof(hookFunc) === 'string') {
-            switch (hookFunc) {
-                case 'replace': hookFunc = replaceObject; break;
-                default: throw new Error('Unknown hook name: ' + hookFunc)
-            }
+    if (typeof(hookFunc) === 'string') {
+        switch (request.type + '::' + hookFunc) {
+            case 'object::replace':
+                hookFunc = replaceObject;
+                break;
+            case 'list::replace':
+            case 'page::replace':
+                hookFunc = replaceObjects;
+                break;
+            case 'list::unshift':
+            case 'page::unshift':
+                hookFunc = unshiftObjects;
+                break;
+            case 'list::push':
+            case 'page::push':
+                hookFunc = pushObjects;
+                break;
+            default:
+                throw new Error('Unknown hook name: ' + hookFunc)
         }
+    }
+    if (request.type === 'object') {
         return hookFunc(request.object, input);
     } else if (request.type === 'page' || request.type === 'list') {
+        // get rid of null and sort list by ID or URL
         input = input.filter(Boolean);
         sortObjects(input);
-        if (typeof(hookFunc) === 'string') {
-            switch (hookFunc) {
-                case 'replace': hookFunc = replaceObjects; break;
-                case 'unshift': hookFunc = unshiftObjects; break;
-                case 'push': hookFunc = pushObjects; break;
-                default: throw new Error('Unknown hook name: ' + hookFunc)
-            }
-        }
         return hookFunc(request.objects, input);
     }
 }
@@ -656,34 +1002,62 @@ function pushObjects(objects, newObjects) {
 
 function matchRequest(request, props) {
     for (var name in props) {
-        if (request[name] !== props[name]) {
-            if (name === 'options') {
-                if (!matchOptions(request[name], props[name])) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
+        if (!matchObject(request[name], props[name])) {
+            return false;
         }
     }
     return true;
 }
 
-function matchOptions(options1, options2) {
-    for (var name in options1) {
-        var option1 = options1[name];
-        var option2 = options2[name];
-        if (option1 !== option2) {
-            if (typeof(option1) === 'function' && typeof(option2) === 'function') {
-                if (option1.toString() !== option2.toString()) {
+function matchObject(object1, object2) {
+    if (object1 !== object2) {
+        if (object1 instanceof Object && object2 instanceof Object) {
+            if (object1.constructor !== object2.constructor) {
+                return false;
+            }
+            if (object1 instanceof Array) {
+                if (object1.length !== object2.length) {
+                    return false;
+                }
+                for (var i = 0; i < object1.length; i++) {
+                    if (!matchObject(object1[i], object2[i])) {
+                        return false;
+                    }
+                }
+            } else if (object1 instanceof Function) {
+                if (object1.toString() !== object2.toString()) {
                     return false;
                 }
             } else {
-                return false;
+                for (var name in object1) {
+                    if (!matchObject(object1[name], object2[name])) {
+                        return false;
+                    }
+                }
+                for (var name in object2) {
+                    if (!(name in object1)) {
+                        return false;
+                    }
+                }
             }
+        } else {
+            return false;
         }
     }
     return true;
+}
+
+function matchArray(array1, array2) {
+    if (array1.length !== array2.length) {
+        return false;
+    }
+    for (var i = 0; i < array1.length; i++) {
+        var value1 = object1[name];
+        var value2 = object2[name];
+        if (value1 !== value2) {
+
+        }
+    }
 }
 
 function getDirectoryURL(url) {
@@ -706,6 +1080,23 @@ function getObjectURL(dirURL, object) {
     }
 }
 
+/**
+ * Append the variable "page" to a URL's query, unless page equals 1.
+ *
+ * @param  {String} url
+ * @param  {Number} page
+ *
+ * @return {String}
+ */
+function attachPageNumber(url, page) {
+    if (page === 1) {
+        return url;
+    }
+    var qi = url.indexOf('?');
+    var sep = (qi === -1) ? '?' : '&';
+    return sep + 'page=' + page;
+}
+
 function matchURL(url1, url2) {
     var qi = url1.lastIndexOf('?');
     if (qi !== -1) {
@@ -719,6 +1110,15 @@ function matchDirectoryURL(url1, url2) {
     return matchURL(dirURL1, url2);
 }
 
+/**
+ * Find the position of an object in an array based on id or URL. Return -1 if
+ * the object is not there.
+ *
+ * @param  {Array<Object>} list
+ * @param  {Object} object
+ *
+ * @return {Number}
+ */
 function findObjectIndex(list, object) {
     var keyA = object.id || object.url;
     for (var i = 0; i < list.length; i++) {
@@ -733,6 +1133,14 @@ function findObjectIndex(list, object) {
     return -1;
 }
 
+/**
+ * Find an object in an array based on ID or URL.
+ *
+ * @param  {[type]} list
+ * @param  {[type]} object
+ *
+ * @return {Object|undefined}
+ */
 function findObject(list, object) {
     var index = findObjectIndex(list, object);
     if (index !== -1) {
@@ -740,6 +1148,11 @@ function findObject(list, object) {
     }
 }
 
+/**
+ * Sort a list of objects based on ID or URL
+ *
+ * @param  {Array<Object>} list
+ */
 function sortObjects(list) {
     list.sort(function(a, b) {
         var keyA = a.id || a.url;
@@ -752,4 +1165,85 @@ function sortObjects(list) {
             return 0;
         }
     });
+}
+
+/**
+ * Append objects to a list, making sure duplicates aren't added
+ *
+ * @param  {Array<Object>} list
+ * @param  {Array<Object>} objects
+ *
+ * @return {Array<Object>}
+ */
+function appendObjects(list, objects) {
+    if (!list) {
+        return objects;
+    } else {
+        objects = objects.filter(function(object) {
+            return findObjectIndex(list, object) === -1;
+        });
+        return list.concat(objects);
+    }
+}
+
+/**
+ * Replace objects in newList that are identical to their counterpart in oldList.
+ * Return true if newList is identical to oldList.
+ *
+ * @param  {Array<Object>} newList
+ * @param  {Array<Object>} oldList
+ *
+ * @return {Boolean}
+ */
+function replaceIdentificalObjects(newList, oldList) {
+    var unchanged = 0;
+    for (var i = 0; i < newList.length; i++) {
+        var oldIndex = findObjectIndex(oldList, newList[i]);
+        if (oldIndex !== -1) {
+            if (matchObject(newList[i], oldList[oldIndex])) {
+                newList[i] = oldList[oldIndex];
+                if (i === oldIndex) {
+                    unchanged++;
+                }
+            }
+        }
+    }
+    return (unchanged === newList.length && newList.length === oldList.length);
+}
+
+/**
+ * Attach objects from an older list to a new list that's being retrieved.
+ *
+ * @param  {Array<Object>} newList
+ * @param  {Array<Object>} oldList
+ *
+ * @return {Array<Object>}
+ */
+function joinObjectLists(newList, oldList) {
+    // find point where the two list intersect
+    var startIndex = 0;
+    for (var i = newList.length - 1; i >= 0; i--) {
+        var newObject = newList[i];
+        var oldIndex = findObjectIndex(oldList, newObject);
+        if (oldIndex !== -1) {
+            startIndex = oldIndex + 1;
+            break;
+        }
+    }
+    // remove objects ahead of the intersection from the old list, as well
+    // as any object that is present in the new list (due to change in order)
+    var oldObjects = oldList.filter(function(object, index) {
+        if (index >= startIndex) {
+            return findObjectIndex(newList, object) === -1;
+        }
+    });
+    return newList.concat(oldObjects);
+}
+
+function getTime(diff) {
+    var date = new Date;
+    if (diff) {
+        date = new Date(date.getTime() + diff);
+    }
+    return date.toISOString();
 }
