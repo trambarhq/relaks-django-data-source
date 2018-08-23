@@ -74,6 +74,30 @@ prototype.componentWillUnmount = function() {
 };
 
 /**
+ * Add baseURL to relative URL
+ *
+ * @param  {String} url
+ *
+ * @return {String}
+ */
+prototype.resolveURL = function(url) {
+    if (typeof(url) !== 'string') {
+        return url;
+    }
+    var baseURL = this.props.baseURL;
+    if (!baseURL || /^https?:/.test(url)) {
+        return url;
+    }
+    if (baseURL.charAt(baseURL.length - 1) === '/') {
+        baseURL = baseURL.substr(0, baseURL.length - 1);
+    }
+    if (url.charAt(0) !== '/') {
+        url = '/' + url;
+    }
+    return baseURL + url;
+};
+
+/**
  * Call the onChange handler
  */
 prototype.triggerChangeEvent = function() {
@@ -92,9 +116,10 @@ prototype.triggerChangeEvent = function() {
  */
 prototype.fetchOne = function(url, options) {
     var _this = this;
+    var fullURL = this.resolveURL(url);
     var props = {
         type: 'object',
-        url: url,
+        url: fullURL,
         options: options,
     };
     var request = this.findRequest(props);
@@ -103,7 +128,7 @@ prototype.fetchOne = function(url, options) {
     }
     if (!request) {
         request = props;
-        request.promise = this.fetch(url).then(function(response) {
+        request.promise = this.fetch(fullURL).then(function(response) {
             var object = response;
             _this.updateRequest(request, {
                 object: object,
@@ -129,6 +154,7 @@ prototype.fetchOne = function(url, options) {
  */
 prototype.fetchPage = function(url, page, options) {
     var _this = this;
+    var fullURL = this.resolveURL(url);
     var props = {
         type: 'page',
         url: url,
@@ -137,7 +163,7 @@ prototype.fetchPage = function(url, page, options) {
     };
     var request = this.findRequest(props);
     if (!request) {
-        var pageURL = attachPageNumber(url, page);
+        var pageURL = attachPageNumber(fullURL, page);
         request = props;
         request.promise = this.fetch(pageURL).then(function(response) {
             var objects = response.results;
@@ -164,9 +190,10 @@ prototype.fetchPage = function(url, page, options) {
  */
 prototype.fetchList = function(url, options) {
     var _this = this;
+    var fullURL = this.resolveURL(url);
     var props = {
         type: 'list',
-        url: url,
+        url: fullURL,
         options: options,
     };
     var request = this.findRequest(props);
@@ -276,12 +303,13 @@ prototype.fetchMultiple = function(urls, options) {
         }
     }
     var promises = urls.map(function(url) {
-        var request = _this.findRequest({ url: url, list: false });
+        var fullURL = _this.resolveURL(url);
+        var request = _this.findRequest({ url: fullURL, list: false });
         if (request && request.result) {
             results[url] = request.result;
             cached++;
         } else {
-            return _this.fetchOne(url, fetchOptions);
+            return _this.fetchOne(fullURL, fetchOptions);
         }
     });
 
@@ -327,12 +355,12 @@ prototype.fetchMultiple = function(urls, options) {
 /**
  * Fetch JSON object at URL
  *
- * @param  {String} url
+ * @param  {String} fullURL
  *
  * @return {Promise<Object>}
  */
-prototype.fetch = function(url) {
-    return fetch(url).then(function(response) {
+prototype.fetch = function(fullURL) {
+    return fetch(fullURL).then(function(response) {
         return response.json();
     });
 };
@@ -557,17 +585,18 @@ prototype.insertOne = function(dirURL, object) {
  * @return {Promise<Array>}
  */
 prototype.insertMultiple = function(dirURL, objects) {
+    var _this = this;
+    var fullDirURL = this.resolveURL(dirURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.insert(dirURL, objects[i]));
+        promises.push(this.insert(fullDirURL, objects[i]));
     }
-    var _this = this;
     return Promise.all(promises).then(function(insertedObjects) {
         // sort the newly created objects
         var changed = false;
         var requests = _this.requests.filter(function(request) {
             if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, dirURL)) {
+                if (matchURL(request.url, fullDirURL)) {
                     if (request.objects) {
                         var newObjects = runHook(request, 'afterInsert', insertedObjects);
                         if (newObjects !== false) {
@@ -596,7 +625,7 @@ prototype.insertMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.insert = function(dirURL, object) {
+prototype.insert = function(fullDirURL, object) {
     var options = {
         method: 'POST',
         mode: "cors",
@@ -606,7 +635,7 @@ prototype.insert = function(dirURL, object) {
         },
         body: JSON.stringify(object),
     };
-    return fetch(dirURL, options).then(function(response) {
+    return fetch(fullDirURL, options).then(function(response) {
         return response.json();
     });
 };
@@ -634,16 +663,17 @@ prototype.updateOne = function(dirURL, object) {
  * @return {Promise<Array>}
  */
 prototype.updateMultiple = function(dirURL, objects) {
+    var _this = this;
+    var fullDirURL = this.resolveURL(dirURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.update(dirURL, objects[i]));
+        promises.push(this.update(fullDirURL, objects[i]));
     }
-    var _this = this;
     return Promise.all(promises).then(function(updatedObjects) {
         var changed = false;
         var requests = _this.requests.filter(function(request) {
             if (request.type === 'object') {
-                if (matchDirectoryURL(request.url, dirURL)) {
+                if (matchDirectoryURL(request.url, fullDirURL)) {
                     if (request.object) {
                         var updatedObject = findObject(updatedObjects, request.object);
                         if (updatedObject) {
@@ -660,7 +690,7 @@ prototype.updateMultiple = function(dirURL, objects) {
                     }
                 }
             } else if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, dirURL)) {
+                if (matchURL(request.url, fullDirURL)) {
                     if (request.objects) {
                         var newObjects = runHook(request, 'afterUpdate', updatedObjects);
                         if (newObjects !== false) {
@@ -687,9 +717,9 @@ prototype.updateMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.update = function(dirURL, object) {
-    var url = getObjectURL(dirURL, object);
-    if (!url) {
+prototype.update = function(fullDirURL, object) {
+    var fullURL = getObjectURL(fullDirURL, object);
+    if (!fullURL) {
         return Promise.resolve(null);
     }
     var options = {
@@ -701,7 +731,7 @@ prototype.update = function(dirURL, object) {
         },
         body: JSON.stringify(object),
     };
-    return fetch(url, options).then(function(response) {
+    return fetch(fullURL, options).then(function(response) {
         return response.json();
     });
 };
@@ -713,18 +743,19 @@ prototype.deleteOne = function(url, object) {
 };
 
 prototype.deleteMultiple = function(dirURL, objects) {
+    var _this = this;
+    var fullDirURL = this.resolveURL(dirURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.delete(dirURL, objects[i]));
+        promises.push(this.delete(fullDirURL, objects[i]));
     }
-    var _this = this;
     return Promise.all(promises).then(function(deletedObjects) {
         var changed = false;
         var requests = _this.requests.filter(function(request) {
             var keep = true;
             if (request.type === 'object') {
                 // remove request
-                if (matchDirectoryURL(request.url, dirURL)) {
+                if (matchDirectoryURL(request.url, fullDirURL)) {
                     if (request.object) {
                         var deletedObject = findObject(deletedObjects, request.object);
                         if (deletedObject) {
@@ -744,7 +775,7 @@ prototype.deleteMultiple = function(dirURL, objects) {
                     }
                 }
             } else if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, dirURL)) {
+                if (matchURL(request.url, fullDirURL)) {
                     if (request.objects) {
                         var newObjects = runHook(request, 'afterDelete', deletedObjects);
                         if (newObjects !== false) {
@@ -780,9 +811,9 @@ prototype.deleteMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.delete = function(dirURL, object) {
-    var url = getObjectURL(dirURL, object);
-    if (!url) {
+prototype.delete = function(fullDirURL, object) {
+    var fullURL = getObjectURL(fullDirURL, object);
+    if (!fullURL) {
         return Promise.resolve(null);
     }
     var options = {
@@ -790,7 +821,7 @@ prototype.delete = function(dirURL, object) {
         mode: "cors",
         cache: "no-cache",
     };
-    return fetch(url, options).then(function() {
+    return fetch(fullURL, options).then(function() {
         return object;
     });
 };
