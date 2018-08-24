@@ -20,28 +20,28 @@ prototype.fetchPage = function(url, page, options) {
     return this.dataSource.fetchPage(url, page, options);
 };
 
-prototype.insertOne = function(dirURL, object) {
-    return this.dataSource.insertOne(dirURL, object);
+prototype.insertOne = function(folderURL, object) {
+    return this.dataSource.insertOne(folderURL, object);
 };
 
-prototype.insertMultiple = function(dirURL, objects) {
-    return this.dataSource.insertMultiple(dirURL, objects);
+prototype.insertMultiple = function(folderURL, objects) {
+    return this.dataSource.insertMultiple(folderURL, objects);
 };
 
-prototype.updateOne = function(dirURL, object) {
-    return this.dataSource.updateOne(dirURL, object);
+prototype.updateOne = function(folderURL, object) {
+    return this.dataSource.updateOne(folderURL, object);
 };
 
-prototype.updateMultiple = function(dirURL, objects) {
-    return this.dataSource.updateMultiple(dirURL, objects);
+prototype.updateMultiple = function(folderURL, objects) {
+    return this.dataSource.updateMultiple(folderURL, objects);
 };
 
-prototype.deleteOne = function(dirURL, object) {
-    return this.dataSource.deleteOne(dirURL, object);
+prototype.deleteOne = function(folderURL, object) {
+    return this.dataSource.deleteOne(folderURL, object);
 };
 
-prototype.deleteMultiple = function(dirURL, objects) {
-    return this.dataSource.deleteMultiple(dirURL, objects);
+prototype.deleteMultiple = function(folderURL, objects) {
+    return this.dataSource.deleteMultiple(folderURL, objects);
 };
 
 prototype.authenticate = function(url, credentials) {

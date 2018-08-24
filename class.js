@@ -88,13 +88,7 @@ prototype.resolveURL = function(url) {
     if (!baseURL || /^https?:/.test(url)) {
         return url;
     }
-    if (baseURL.charAt(baseURL.length - 1) === '/') {
-        baseURL = baseURL.substr(0, baseURL.length - 1);
-    }
-    if (url.charAt(0) !== '/') {
-        url = '/' + url;
-    }
-    return baseURL + url;
+    return removeTrailingSlash(baseURL) + addLeadingSlash(url);
 };
 
 /**
@@ -116,10 +110,10 @@ prototype.triggerChangeEvent = function() {
  */
 prototype.fetchOne = function(url, options) {
     var _this = this;
-    var fullURL = this.resolveURL(url);
+    var absURL = this.resolveURL(url);
     var props = {
         type: 'object',
-        url: fullURL,
+        url: absURL,
         options: options,
     };
     var request = this.findRequest(props);
@@ -128,7 +122,7 @@ prototype.fetchOne = function(url, options) {
     }
     if (!request) {
         request = props;
-        request.promise = this.fetch(fullURL).then(function(response) {
+        request.promise = this.fetch(absURL).then(function(response) {
             var object = response;
             _this.updateRequest(request, {
                 object: object,
@@ -137,10 +131,13 @@ prototype.fetchOne = function(url, options) {
             return object;
         });
         this.addRequest(request);
-    } else if (request.dirty)  {
-        this.refreshOne(request);
     }
-    return request.promise;
+    return request.promise.then(function(object) {
+        if (request.dirty)  {
+            _this.refreshOne(request);
+        }
+        return object;
+    });
 };
 
 /**
@@ -154,7 +151,7 @@ prototype.fetchOne = function(url, options) {
  */
 prototype.fetchPage = function(url, page, options) {
     var _this = this;
-    var fullURL = this.resolveURL(url);
+    var absURL = this.resolveURL(url);
     var props = {
         type: 'page',
         url: url,
@@ -163,7 +160,7 @@ prototype.fetchPage = function(url, page, options) {
     };
     var request = this.findRequest(props);
     if (!request) {
-        var pageURL = attachPageNumber(fullURL, page);
+        var pageURL = attachPageNumber(absURL, page);
         request = props;
         request.promise = this.fetch(pageURL).then(function(response) {
             var objects = response.results;
@@ -174,10 +171,13 @@ prototype.fetchPage = function(url, page, options) {
             return objects;
         });
         this.addRequest(request)
-    } else if (request.dirty)  {
-        this.refreshPage(request);
     }
-    return request.promise
+    return request.promise.then(function(objects) {
+        if (request.dirty)  {
+            _this.refreshPage(request);
+        }
+        return objects;
+    });
 };
 
 /**
@@ -190,10 +190,10 @@ prototype.fetchPage = function(url, page, options) {
  */
 prototype.fetchList = function(url, options) {
     var _this = this;
-    var fullURL = this.resolveURL(url);
+    var absURL = this.resolveURL(url);
     var props = {
         type: 'list',
-        url: fullURL,
+        url: absURL,
         options: options,
     };
     var request = this.findRequest(props);
@@ -201,10 +201,13 @@ prototype.fetchList = function(url, options) {
         request = props;
         request.promise = this.fetchNextPage(request, true);
         this.addRequest(request);
-    } else if (request.dirty)  {
-        this.refreshList(request);
     }
-    return request.promise;
+    return request.promise.then(function(objects) {
+        if (request.dirty)  {
+            _this.refreshList(request);
+        }
+        return objects;
+    });
 };
 
 /**
@@ -289,12 +292,11 @@ prototype.fetchNextPage = function(request, initial) {
  * @param  {Array<String>} urls
  * @param  {Object} options
  *
- * @return {Promise<Object>}
+ * @return {Promise<Array>}
  */
 prototype.fetchMultiple = function(urls, options) {
     // see which ones are cached already
     var _this = this;
-    var results = {};
     var cached = 0;
     var fetchOptions = {};
     for (var name in options) {
@@ -303,26 +305,20 @@ prototype.fetchMultiple = function(urls, options) {
         }
     }
     var promises = urls.map(function(url) {
-        var fullURL = _this.resolveURL(url);
-        var request = _this.findRequest({ url: fullURL, list: false });
-        if (request && request.result) {
-            results[url] = request.result;
+        var absURL = _this.resolveURL(url);
+        var request = _this.findRequest({ url: absURL, type: 'object' });
+        if (request && request.object) {
             cached++;
+            return request.object;
         } else {
-            return _this.fetchOne(fullURL, fetchOptions);
+            return _this.fetchOne(absURL, fetchOptions);
         }
     });
 
-    // wait for the compvare set to arrive
-    var compvareSetPromise;
+    // wait for the complete list to arrive
+    var completeListPromise;
     if (cached < urls.length) {
-        compvareSetPromise = Promise.all(promises).then(function(objects) {
-            var compvareSet = {};
-            urls.forEach(function(url, index) {
-                compvareSet[url] = objects[index] || results[url];
-            });
-            return compvareSet;
-        });
+        completeListPromise = Promise.all(promises);
     }
 
     // see whether partial result set should be immediately returned
@@ -339,28 +335,37 @@ prototype.fetchMultiple = function(urls, options) {
     } else {
         minimum = urls.length;
     }
-    if (cached < minimum && compvareSetPromise) {
-        return compvareSetPromise;
+    if (cached < minimum && completeListPromise) {
+        return completeListPromise;
     } else {
-        // return partial set then fire change event when compvare set arrives
-        if (compvareSetPromise) {
-            compvareSetPromise.then(function() {
+        if (completeListPromise) {
+            // return partial list then fire change event when complete list arrives
+            completeListPromise.then(function() {
                 _this.triggerChangeEvent();
             });
+            return promises.map(function(object) {
+                if (object.then instanceof Function) {
+                    return null;    // a promise--don't return it
+                } else {
+                    return object;
+                }
+            });
+        } else {
+            // list is complete already
+            return promises;
         }
-        return Promise.resolve(results);
     }
 };
 
 /**
  * Fetch JSON object at URL
  *
- * @param  {String} fullURL
+ * @param  {String} absURL
  *
  * @return {Promise<Object>}
  */
-prototype.fetch = function(fullURL) {
-    return fetch(fullURL).then(function(response) {
+prototype.fetch = function(absURL) {
+    return fetch(absURL).then(function(response) {
         return response.json();
     });
 };
@@ -565,13 +570,13 @@ prototype.waitForNextPage = function(request) {
 /**
  * Insert an object into remote database
  *
- * @param  {String} dirURL
+ * @param  {String} folderURL
  * @param  {Object} object
  *
  * @return {Promise<Object>}
  */
-prototype.insertOne = function(dirURL, object) {
-    return this.insertMultiple(dirURL, [ object ]).then((insertedObjects) => {
+prototype.insertOne = function(folderURL, object) {
+    return this.insertMultiple(folderURL, [ object ]).then((insertedObjects) => {
         return insertedObjects[0];
     });
 };
@@ -579,30 +584,33 @@ prototype.insertOne = function(dirURL, object) {
 /**
  * Insert multiple objects into remote database
  *
- * @param  {String} dirURL
+ * @param  {String} folderURL
  * @param  {Array<Object>} objects
  *
  * @return {Promise<Array>}
  */
-prototype.insertMultiple = function(dirURL, objects) {
+prototype.insertMultiple = function(folderURL, objects) {
     var _this = this;
-    var fullDirURL = this.resolveURL(dirURL);
+    var folderAbsURL = this.resolveURL(folderURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.insert(fullDirURL, objects[i]));
+        promises.push(this.insert(folderAbsURL, objects[i]));
     }
     return Promise.all(promises).then(function(insertedObjects) {
         // sort the newly created objects
         var changed = false;
         var requests = _this.requests.filter(function(request) {
             if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, fullDirURL)) {
+                if (matchURL(request.url, folderAbsURL)) {
                     if (request.objects) {
-                        var newObjects = runHook(request, 'afterInsert', insertedObjects);
-                        if (newObjects !== false) {
-                            if (newObjects) {
-                                request.objects = newObjects;
-                                request.promise = Promise.resolve(newObjects);
+                        var objects = runHook(request, 'afterInsert', insertedObjects);
+                        if (objects !== false) {
+                            if (objects) {
+                                if (request.type === 'list') {
+                                    objects.more = request.objects.more;
+                                }
+                                request.objects = objects;
+                                request.promise = Promise.resolve(objects);
                             } else {
                                 // default behavior:
                                 // force reload from server
@@ -612,7 +620,7 @@ prototype.insertMultiple = function(dirURL, objects) {
                         }
                     } else {
                         // need to run query again, in case the dataset that's
-                        // currently in flight has already become out-of-date
+                        // currently in flight is already stale
                         request.dirty = true;
                         changed = true;
                     }
@@ -625,7 +633,7 @@ prototype.insertMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.insert = function(fullDirURL, object) {
+prototype.insert = function(folderAbsURL, object) {
     var options = {
         method: 'POST',
         mode: "cors",
@@ -635,7 +643,7 @@ prototype.insert = function(fullDirURL, object) {
         },
         body: JSON.stringify(object),
     };
-    return fetch(fullDirURL, options).then(function(response) {
+    return fetch(folderAbsURL, options).then(function(response) {
         return response.json();
     });
 };
@@ -643,13 +651,18 @@ prototype.insert = function(fullDirURL, object) {
 /**
  * Update an object
  *
- * @param  {String} dirURL
+ * @param  {String} folderURL
  * @param  {Object} object
  *
  * @return {Promise<Object>}
  */
-prototype.updateOne = function(dirURL, object) {
-    return this.updateMultiple(dirURL, [ object ]).then((results) => {
+prototype.updateOne = function(folderURL, object) {
+    // allow folderURL to be omitted
+    if (object === undefined && folderURL instanceof Object) {
+        object = folderURL;
+        folderURL = null;
+    }
+    return this.updateMultiple(folderURL, [ object ]).then((results) => {
         return results[0];
     });
 };
@@ -657,46 +670,68 @@ prototype.updateOne = function(dirURL, object) {
 /**
  * Save multiple objects
  *
- * @param  {String} dirURL
+ * @param  {String} folderURL
  * @param  {Array<Object>} objects
  *
  * @return {Promise<Array>}
  */
-prototype.updateMultiple = function(dirURL, objects) {
+prototype.updateMultiple = function(folderURL, objects) {
+    // allow folderURL to be omitted
+    if (objects === undefined && folderURL instanceof Array) {
+        objects = folderURL;
+        folderURL = null;
+    }
     var _this = this;
-    var fullDirURL = this.resolveURL(dirURL);
+    var folderAbsURL = this.resolveURL(folderURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.update(fullDirURL, objects[i]));
+        promises.push(this.update(folderAbsURL, objects[i]));
     }
     return Promise.all(promises).then(function(updatedObjects) {
         var changed = false;
         var requests = _this.requests.filter(function(request) {
-            if (request.type === 'object') {
-                if (matchDirectoryURL(request.url, fullDirURL)) {
-                    if (request.object) {
-                        var updatedObject = findObject(updatedObjects, request.object);
-                        if (updatedObject) {
-                            var newObject = runHook(request, 'afterUpdate', updatedObject);
-                            if (newObject) {
-                                request.object = newObject;
-                            } else {
-                                // default behavior:
-                                // force reload from server
-                                request.dirty = true;
-                            }
-                            changed = true;
-                        }
+            updatedObjects.some(function(updatedObject) {
+                if (request.type === 'object') {
+                    var objectURL = getObjectURL(folderAbsURL, updatedObject);
+                    if (!matchURL(request.url, objectURL)) {
+                        return false;
                     }
-                }
-            } else if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, fullDirURL)) {
+                    if (request.object) {
+                        var object = runHook(request, 'afterUpdate', updatedObject);
+                        if (object) {
+                            request.object = object;
+                            request.promise = Promise.resolve(object);
+                        } else {
+                            // default behavior:
+                            // force reload from server
+                            request.dirty = true;
+                        }
+                        changed = true;
+                    } else {
+                        request.dirty = true;
+                        changed = true;
+                    }
+                    return true;
+                } else if (request.type === 'page' || request.type === 'list') {
+                    var objectFolderURL = getObjectFolderURL(folderAbsURL, updatedObject);
+                    if (!matchURL(request.url, objectFolderURL)) {
+                        return false;
+                    }
                     if (request.objects) {
-                        var newObjects = runHook(request, 'afterUpdate', updatedObjects);
-                        if (newObjects !== false) {
-                            if (newObjects) {
-                                request.objects = newObjects;
-                                request.promise = Promise.resolve(newObjects);
+                        // filter out objects that aren't in the same folder
+                        //
+                        // only relevant when hyperlink-keys are used and
+                        // objects in different folders are updated at
+                        // the same time (folderURL has to be null)
+                        var updatedObjectsInFolder = removeObjectsOutsideFolder(updatedObjects, objectFolderURL);
+                        var objects = runHook(request, 'afterUpdate', updatedObjectsInFolder);
+                        if (objects !== false) {
+                            if (objects) {
+                                if (request.type === 'list') {
+                                    objects.more = request.objects.more;
+                                }
+                                request.objects = objects;
+                                request.promise = Promise.resolve(objects);
                             } else {
                                 // default behavior:
                                 // force reload from server
@@ -708,8 +743,9 @@ prototype.updateMultiple = function(dirURL, objects) {
                         request.dirty = true;
                         changed = true;
                     }
+                    return true;
                 }
-            }
+            });
             return true;
         });
         _this.updateRequestsIfChanged(requests, changed);
@@ -717,9 +753,9 @@ prototype.updateMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.update = function(fullDirURL, object) {
-    var fullURL = getObjectURL(fullDirURL, object);
-    if (!fullURL) {
+prototype.update = function(folderAbsURL, object) {
+    var absURL = getObjectURL(folderAbsURL, object);
+    if (!absURL) {
         return Promise.resolve(null);
     }
     var options = {
@@ -731,7 +767,7 @@ prototype.update = function(fullDirURL, object) {
         },
         body: JSON.stringify(object),
     };
-    return fetch(fullURL, options).then(function(response) {
+    return fetch(absURL, options).then(function(response) {
         return response.json();
     });
 };
@@ -742,59 +778,76 @@ prototype.deleteOne = function(url, object) {
     });
 };
 
-prototype.deleteMultiple = function(dirURL, objects) {
+prototype.deleteMultiple = function(folderURL, objects) {
+    // allow folderURL to be omitted
+    if (objects === undefined && folderURL instanceof Array) {
+        objects = folderURL;
+        folderURL = null;
+    }
     var _this = this;
-    var fullDirURL = this.resolveURL(dirURL);
+    var folderAbsURL = this.resolveURL(folderURL);
     var promises = [];
     for (var i = 0; i < objects.length; i++) {
-        promises.push(this.delete(fullDirURL, objects[i]));
+        promises.push(this.delete(folderAbsURL, objects[i]));
     }
     return Promise.all(promises).then(function(deletedObjects) {
         var changed = false;
         var requests = _this.requests.filter(function(request) {
             var keep = true;
-            if (request.type === 'object') {
-                // remove request
-                if (matchDirectoryURL(request.url, fullDirURL)) {
-                    if (request.object) {
-                        var deletedObject = findObject(deletedObjects, request.object);
-                        if (deletedObject) {
-                            var newObject = runHook(request, 'afterDelete', deletedObject);
-                            if (newObject !== false) {
-                                if (newObject) {
-                                    request.object = newObject;
-                                    request.promise = Promise.resolve(newObject);
-                                } else {
-                                    // default behavior:
-                                    // remove request from cache
-                                    keep = false;
-                                }
-                                changed = true;
-                            }
-                        }
+            deletedObjects.some(function(deletedObject) {
+                if (request.type === 'object') {
+                    var objectURL = getObjectURL(folderAbsURL, deletedObject);
+                    if (!matchURL(request.url, objectURL)) {
+                        return false;
                     }
-                }
-            } else if (request.type === 'page' || request.type === 'list') {
-                if (matchURL(request.url, fullDirURL)) {
-                    if (request.objects) {
-                        var newObjects = runHook(request, 'afterDelete', deletedObjects);
-                        if (newObjects !== false) {
-                            if (!newObjects) {
+                    if (request.object) {
+                        var object = runHook(request, 'afterDelete', deletedObject);
+                        if (object !== false) {
+                            if (object) {
+                                request.object = object;
+                                request.promise = Promise.resolve(object);
+                            } else {
                                 // default behavior:
-                                // remove matching objects from list
-                                newObjects = request.objects.filter(function(object) {
-                                    return findObjectIndex(deletedObjects, object) === -1;
-                                });
-                                if (newObjects.length === request.objects.length) {
-                                    newObjects = null;
+                                // remove request from cache
+                                keep = false;
+                            }
+                            changed = true;
+                        }
+                    } else {
+                        keep = false;
+                        changed = true;
+                    }
+                    return true;
+                } else if (request.type === 'page' || request.type === 'list') {
+                    var objectFolderURL = getObjectFolderURL(folderAbsURL, deletedObject);
+                    if (!matchURL(request.url, objectFolderURL)) {
+                        return false;
+                    }
+                    if (request.objects) {
+                        // see comment in updateMultiple()
+                        var deletedObjectsInFolder = removeObjectsOutsideFolder(deletedObjects, objectFolderURL);
+                        var objects = runHook(request, 'afterDelete', deletedObjectsInFolder);
+                        if (objects !== false) {
+                            if (!objects) {
+                                if (request.type === 'list') {
+                                    // default behavior:
+                                    // remove matching objects from list
+                                    objects = removeObjects(request.objects, deletedObjectsInFolder);
+                                    if (objects.length < request.objects.length) {
+                                        // reattach more()
+                                        objects.more = request.objects.more;
+                                    } else {
+                                        // no change
+                                        objects = null;
+                                    }
+                                } else if (request.type === 'page') {
+                                    request.dirty = true;
+                                    changed = true;
                                 }
                             }
-                            if (newObjects) {
-                                if (request.type === 'list') {
-                                    newObjects.more = request.objects.more;
-                                }
-                                request.objects = newObjects;
-                                request.promise = Promise.resolve(newObjects);
+                            if (objects) {
+                                request.objects = objects;
+                                request.promise = Promise.resolve(objects);
                                 changed = true;
                             }
                         }
@@ -802,8 +855,9 @@ prototype.deleteMultiple = function(dirURL, objects) {
                         request.dirty = true;
                         changed = true;
                     }
+                    return true;
                 }
-            }
+            });
             return keep;
         });
         _this.updateRequestsIfChanged(requests, changed);
@@ -811,9 +865,9 @@ prototype.deleteMultiple = function(dirURL, objects) {
     });
 };
 
-prototype.delete = function(fullDirURL, object) {
-    var fullURL = getObjectURL(fullDirURL, object);
-    if (!fullURL) {
+prototype.delete = function(folderAbsURL, object) {
+    var absURL = getObjectURL(folderAbsURL, object);
+    if (!absURL) {
         return Promise.resolve(null);
     }
     var options = {
@@ -821,7 +875,7 @@ prototype.delete = function(fullDirURL, object) {
         mode: "cors",
         cache: "no-cache",
     };
-    return fetch(fullURL, options).then(function() {
+    return fetch(absURL, options).then(function() {
         return object;
     });
 };
@@ -848,10 +902,10 @@ prototype.findRequest = function(props) {
  */
 prototype.deriveRequest = function(props) {
     var object;
-    var dirURL = getDirectoryURL(props.url);
+    var folderURL = getFolderURL(props.url);
     this.requests.some(function(request) {
         if (request.type === 'page' || request.type === 'list') {
-            if (matchURL(request.url, dirURL)) {
+            if (matchURL(request.url, folderURL)) {
                 object = request.objects.find(function(item) {
                     return (item.url === props.url);
                 });
@@ -991,6 +1045,10 @@ function runHook(request, hookName, input) {
             case 'page::push':
                 hookFunc = pushObjects;
                 break;
+            case 'list::remove':
+            case 'page::remove':
+                hookFunc = removeObjects;
+                break;
             default:
                 throw new Error('Unknown hook name: ' + hookFunc)
         }
@@ -1018,7 +1076,12 @@ function replaceObjects(objects, newObjects) {
 function unshiftObjects(objects, newObjects) {
     objects = objects.slice();
     newObjects.forEach(function(object) {
-        objects.unshift(object);
+        var index = findObjectIndex(objects, object);
+        if (index === -1) {
+            objects.unshift(object);
+        } else {
+            objects[index] = object;
+        }
     });
     return objects;
 }
@@ -1026,9 +1089,20 @@ function unshiftObjects(objects, newObjects) {
 function pushObjects(objects, newObjects) {
     objects = objects.slice();
     newObjects.forEach(function(object) {
-        objects.push(object);
+        var index = findObjectIndex(objects, object);
+        if (index === -1) {
+            objects.push(object);
+        } else {
+            objects[index] = object;
+        }
     });
     return objects;
+}
+
+function removeObjects(objects, deletedObjects) {
+    return objects.filter(function(object) {
+        return findObjectIndex(deletedObjects, object) === -1;
+    });
 }
 
 function matchRequest(request, props) {
@@ -1091,7 +1165,30 @@ function matchArray(array1, array2) {
     }
 }
 
-function getDirectoryURL(url) {
+function removeTrailingSlash(url) {
+    var lc = url.charAt(url.length - 1);
+    if (lc === '/') {
+        return url.substr(0, url.length - 1);
+    }
+    return url;
+}
+
+function addLeadingSlash(url) {
+    var fc = url.charAt(0);
+    if (fc !== '/') {
+        return '/' + url;
+    }
+    return url;
+}
+
+/**
+ * Return the URL of the parent folder
+ *
+ * @param  {String} url
+ *
+ * @return {String}
+ */
+function getFolderURL(url) {
     var ei = url.lastIndexOf('/');
     if (ei === url.length - 1) {
         ei = url.lastIndexOf('/', ei - 1);
@@ -1101,13 +1198,25 @@ function getDirectoryURL(url) {
     }
 }
 
-function getObjectURL(dirURL, object) {
-    if (dirURL && object.id) {
-        var lc = dirURL.charAt(dirURL.length - 1);
-        var sep = (lc !== '/') ? '/' : '';
-        return dirURL + sep + object.id + '/';
+function getObjectURL(folderURL, object) {
+    if (!object) {
+        return;
+    }
+    if (folderURL && object.id) {
+        return removeTrailingSlash(folderURL) + '/' + object.id + '/';
     } else if (object.url) {
         return object.url;
+    }
+}
+
+function getObjectFolderURL(folderURL, object) {
+    if (!object) {
+        return;
+    }
+    if (folderURL && object.id) {
+        return folderURL;
+    } else if (object.url) {
+        return getFolderURL(object.url);
     }
 }
 
@@ -1134,11 +1243,6 @@ function matchURL(url1, url2) {
         url1 = url1.substr(0, qi);
     }
     return (url1 === url2);
-}
-
-function matchDirectoryURL(url1, url2) {
-    var dirURL1 = getDirectoryURL(url1);
-    return matchURL(dirURL1, url2);
 }
 
 /**
@@ -1269,6 +1373,24 @@ function joinObjectLists(newList, oldList) {
         }
     });
     return newList.concat(oldObjects);
+}
+
+/**
+ * Filter out objects that aren't in the directory. Will always return the
+ * same list when objects are keyed by ID and not URL
+ *
+ * @param  {Array<Object>} objects
+ * @param  {String} folderURL
+ *
+ * @return {Array<Object>}
+ */
+function removeObjectsOutsideFolder(objects, folderURL) {
+    return objects.filter(function(object) {
+        var otherfolderURL = getObjectFolderURL(folderURL, object);
+        if (otherfolderURL === folderURL) {
+            return true;
+        }
+    });
 }
 
 function getTime(diff) {
