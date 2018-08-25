@@ -756,7 +756,13 @@ prototype.deleteMultiple = function(folderURL, objects) {
     for (var i = 0; i < objects.length; i++) {
         var object = objects[i];
         var absURL = getObjectURL(folderAbsURL, object);
-        promises.push(absURL ? this.delete(absURL, object) : null);
+        var promise = null;
+        if (absURL) {
+            promise = this.delete(absURL, object).then(function() {
+                return object;
+            });
+        }
+        promises.push(promise);
     }
     return Promise.all(promises).then(function(deletedObjects) {
         var changed = false;
@@ -1195,6 +1201,9 @@ prototype.request = function(url, options) {
     }
     return fetch(url, options).then(function(response) {
         if (response.status < 400) {
+            if (response.status == 204) {
+                return '';
+            }
             return response.json();
         } else if (response.status === 401) {
             return _this.requestAuthentication(url).then(function(authenticated) {
