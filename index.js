@@ -970,12 +970,6 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
     var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
     return this.post(loginAbsURL, credentials).then(function(response) {
-        if (response.status < 400) {
-            return response.json();
-        } else {
-            throw new Error(response.statusText);
-        }
-    }).then(function(response) {
         var token = (response) ? response.key : null;
         if (!token) {
             throw new Error('No authorization token');
@@ -994,15 +988,15 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
  * @return {Promise<Boolean>}
  */
 prototype.authorize = function(loginURL, token, allowURLs) {
+    var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
-
     var authorizationEvent = new RelaksDjangoDataSourceEvent('authorization', this, {
         url: loginAbsURL,
         token: token,
     });
     this.triggerEvent(authorizationEvent);
-    return authorizationEvent.waitForDecision(function() {
+    return authorizationEvent.waitForDecision().then(function() {
         var acceptable = !authorizationEvent.defaultPrevented;
         if (acceptable) {
             // add authorization
@@ -1013,16 +1007,16 @@ prototype.authorize = function(loginURL, token, allowURLs) {
                 deny: []
             };
             // remove previous authorization
-            this.authorizations = this.authorizations.filter(function(authorization) {
+            _this.authorizations = _this.authorizations.filter(function(authorization) {
                 authorization.allow = authorization.allow.filter(function(url) {
                     return (allowAbsURLs.indexOf(url) === -1);
                 });
                 return (authorization.allow.length > 0);
             });
-            this.authorizations.push(authorization);
+            _this.authorizations.push(authorization);
         }
         // resolve and remove authentication requests
-        this.authentications = this.authentications.filter(function(authentication) {
+        _this.authentications = _this.authentications.filter(function(authentication) {
             if (matchAnyURL(authentication.url, allowAbsURLs)) {
                 authentication.resolve(acceptable);
                 return false;
@@ -1638,7 +1632,7 @@ function RelaksDjangoDataSourceEvent(type, target, props) {
     this.type = type;
     this.target = target;
     for (var name in props) {
-        this[name] = props;
+        this[name] = props[name];
     }
     this.defaultPrevented = false;
     this.decisionPromise = null;
