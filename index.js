@@ -254,9 +254,11 @@ prototype.fetchNextPage = function(query, initial) {
                 nextPromise: null,
             });
             objects.more = _this.fetchNoMore.bind(_this, query);
+            objects.total = objects.length;
             return objects;
         } else if (response instanceof Object) {
             // append retrieved objects to list
+            var total = response.count;
             var objects = appendObjects(query.objects, response.results);
             _this.updateQuery(query, {
                 objects: objects,
@@ -270,8 +272,17 @@ prototype.fetchNextPage = function(query, initial) {
             // attach function to results so caller can ask for more results
             if (query.nextURL) {
                 objects.more = _this.fetchNextPage.bind(_this, query, false);
+                objects.total = total;
+
+                // if minimum is provide, fetch more if it's not met
+                var minimum = getMinimum(query.options, total, NaN);
+                if (objects.length < minimum) {
+                    // fetch the next page
+                    return _this.fetchNextPage(query, false);
+                }
             } else {
                 objects.more = _this.fetchNoMore.bind(_this, query);
+                objects.total = objects.length;
             }
 
             // inform parent component that more data is available
@@ -293,7 +304,7 @@ prototype.fetchNextPage = function(query, initial) {
 };
 
 /**
- * Fetch multiple JSON objects. If partial is specified, then immediately
+ * Fetch multiple JSON objects. If minimum is specified, then immediately
  * resolve with cached results when there're sufficient numbers of objects.
  * An onChange will be trigger once the full set is retrieved.
  *
@@ -308,7 +319,7 @@ prototype.fetchMultiple = function(urls, options) {
     var cached = 0;
     var fetchOptions = {};
     for (var name in options) {
-        if (name !== 'partial') {
+        if (name !== 'minimum') {
             fetchOptions[name] = options[name];
         }
     }
@@ -334,19 +345,7 @@ prototype.fetchMultiple = function(urls, options) {
     }
 
     // see whether partial result set should be immediately returned
-    var partial = (options && options.partial !== undefined) ? options.partial : false;
-    var minimum;
-    if (typeof(partial) === 'number') {
-        if (partial < 1.0) {
-            minimum = urls.length * partial;
-        } else {
-            minimum = partial;
-        }
-    } else if (partial) {
-        minimum = 1;
-    } else {
-        minimum = urls.length;
-    }
+    var minimum = getMinimum(options, urls.length, urls.length);
     if (cached < minimum && completeListPromise) {
         return completeListPromise;
     } else {
@@ -485,9 +484,11 @@ prototype.refreshList = function(query) {
                     pageRemaining--;
                     nextURL = response.next;
                     refreshedObjects = appendObjects(refreshedObjects, response.results);
+                    var total = response.count;
                     var objects = joinObjectLists(refreshedObjects, oldObjects);
                     var changed = true;
                     objects.more = fetchMoreAfterward;
+                    objects.total = total;
                     if (replaceIdentificalObjects(objects, query.objects)) {
                         objects = query.objects;
                         changed = false;
@@ -541,6 +542,7 @@ prototype.refreshList = function(query) {
                 changed = false;
             }
             objects.more = _this.fetchNoMore.bind(this, query);
+            objects.total = objects.length;
             _this.updateQuery(query, {
                 objects: objects,
                 promise: Promise.resolve(objects),
@@ -590,7 +592,7 @@ prototype.insertMultiple = function(folderURL, objects) {
     return Promise.all(promises).then(function(insertedObjects) {
         // sort the newly created objects
         var changed = false;
-        var queries = _this.queries.filter(function(query) {
+        _this.queries.forEach(function(query) {
             insertedObjects.some(function(insertedObject) {
                 if (query.type === 'object') {
                     // object queries aren't affected by insert
@@ -604,20 +606,9 @@ prototype.insertMultiple = function(folderURL, objects) {
                     // it isn't possible to insert objects into multiple folders
                     // simultaneously; code is implemented as such only for
                     // consistency sake
-                    var insertedObjectsInFolder = removeObjectsOutsideFolder(insertedObjects, objectFolderURL);
+                    var inFolder = removeObjectsOutsideFolder(insertedObjects, objectFolderURL);
                     var defaultBehavior = 'refresh';
-                    var impact = runHook(query, 'afterInsert', insertedObjectsInFolder, defaultBehavior);
-                    if (impact) {
-                        if (impact instanceof Array) {
-                            var objects = impact;
-                            if (query.type === 'list') {
-                                objects.more = query.objects.more;
-                            }
-                            query.objects = objects;
-                            query.promise = Promise.resolve(objects);
-                        } else {
-                            query.dirty = true;
-                        }
+                    if (runHook(query, 'afterInsert', inFolder, defaultBehavior)) {
                         changed = true;
                     }
                     return true;
@@ -625,7 +616,9 @@ prototype.insertMultiple = function(folderURL, objects) {
             });
             return true;
         });
-        _this.updateQueriesIfChanged(queries, changed);
+        if (changed) {
+            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
         return insertedObjects;
     });
 };
@@ -673,7 +666,7 @@ prototype.updateMultiple = function(folderURL, objects) {
     }
     return Promise.all(promises).then(function(updatedObjects) {
         var changed = false;
-        var queries = _this.queries.filter(function(query) {
+        _this.queries.forEach(function(query) {
             updatedObjects.some(function(updatedObject) {
                 if (query.type === 'object') {
                     var objectURL = getObjectURL(folderAbsURL, updatedObject);
@@ -681,15 +674,7 @@ prototype.updateMultiple = function(folderURL, objects) {
                         return false;
                     }
                     var defaultBehavior = 'replace';
-                    var impact = runHook(query, 'afterUpdate', updatedObject, defaultBehavior);
-                    if (impact) {
-                        if (impact instanceof Object) {
-                            var object = impact;
-                            query.object = object;
-                            query.promise = Promise.resolve(object);
-                        } else {
-                            query.dirty = true;
-                        }
+                    if (runHook(query, 'afterUpdate', updatedObject, defaultBehavior)) {
                         changed = true;
                     }
                     return true;
@@ -703,20 +688,9 @@ prototype.updateMultiple = function(folderURL, objects) {
                     // only relevant when hyperlink-keys are used and
                     // objects in different folders are updated at
                     // the same time (folderURL has to be null)
-                    var updatedObjectsInFolder = removeObjectsOutsideFolder(updatedObjects, objectFolderURL);
+                    var inFolder = removeObjectsOutsideFolder(updatedObjects, objectFolderURL);
                     var defaultBehavior = 'refresh';
-                    var impact = runHook(query, 'afterUpdate', updatedObjectsInFolder, defaultBehavior);
-                    if (impact) {
-                        if (impact instanceof Array) {
-                            var objects = impact;
-                            if (query.type === 'list') {
-                                objects.more = query.objects.more;
-                            }
-                            query.objects = objects;
-                            query.promise = Promise.resolve(objects);
-                        } else {
-                            query.dirty = true;
-                        }
+                    if (runHook(query, 'afterUpdate', inFolder, defaultBehavior)) {
                         changed = true;
                     }
                     return true;
@@ -724,7 +698,9 @@ prototype.updateMultiple = function(folderURL, objects) {
             });
             return true;
         });
-        _this.updateQueriesIfChanged(queries, changed);
+        if (changed) {
+            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
         return updatedObjects;
     });
 };
@@ -766,13 +742,8 @@ prototype.deleteMultiple = function(folderURL, objects) {
                         return false;
                     }
                     var defaultBehavior = 'remove';
-                    var impact = runHook(query, 'afterDelete', deletedObject, defaultBehavior);
-                    if (impact) {
-                        if (impact instanceof Object) {
-                            var object = impact;
-                            query.object = object;
-                            query.promise = Promise.resolve(object);
-                        } else {
+                    if (runHook(query, 'afterDelete', deletedObject, defaultBehavior)) {
+                        if (query.dirty) {
                             keep = false;
                         }
                         changed = true;
@@ -784,20 +755,9 @@ prototype.deleteMultiple = function(folderURL, objects) {
                         return false;
                     }
                     // see comment in updateMultiple()
-                    var deletedObjectsInFolder = removeObjectsOutsideFolder(deletedObjects, objectFolderURL);
+                    var inFolder = removeObjectsOutsideFolder(deletedObjects, objectFolderURL);
                     var defaultBehavior = (query.type === 'list') ? 'remove' : 'refresh';
-                    var impact = runHook(query, 'afterDelete', deletedObjectsInFolder, defaultBehavior);
-                    if (impact) {
-                        if (impact instanceof Array) {
-                            var objects = impact;
-                            if (query.type === 'list') {
-                                objects.more = query.objects.more;
-                            }
-                            query.objects = objects;
-                            query.promise = Promise.resolve(objects);
-                        } else {
-                            query.dirty = true;
-                        }
+                    if (runHook(query, 'afterDelete', inFolder, defaultBehavior)) {
                         changed = true;
                     }
                     return true;
@@ -805,7 +765,10 @@ prototype.deleteMultiple = function(folderURL, objects) {
             });
             return keep;
         });
-        _this.updateQueriesIfChanged(queries, changed);
+        if (changed) {
+            _this.queries = queries;
+            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
         return deletedObjects;
     });
 };
@@ -881,19 +844,6 @@ prototype.addQuery = function(query) {
 prototype.updateQuery = function(query, props) {
     for (var name in props) {
         query[name] = props[name];
-    }
-};
-
-/**
- * Update query list if it has changed and trigger change event
- *
- * @param  {Array} queries
- * @param  {Boolean} changed
- */
-prototype.updateQueriesIfChanged = function(queries, changed) {
-    if (changed) {
-        this.queries = queries;
-        this.triggerEvent(new RelaksDjangoDataSourceEvent('change', this));
     }
 };
 
@@ -1203,14 +1153,14 @@ prototype.request = function(url, options) {
 
 /**
  * Run hook function on an cached fetch query after an insert, update, or
- * delete operation.
+ * delete operation. Return true when query is changed.
  *
  * @param  {Object} query
  * @param  {String} hookName
  * @param  {Array<Object>|Object} input
  * @param  {String} defaultBehavior
  *
- * @return {Boolean|Array<Object>|Object}
+ * @return {Boolean}
  */
 function runHook(query, hookName, input, defaultBehavior) {
     var hookFunc = (query.options) ? query.options[hookName] : null;
@@ -1242,6 +1192,9 @@ function runHook(query, hookName, input, defaultBehavior) {
                     case 'page::push':
                         hookFunc = pushObjects;
                         break;
+                    case 'object::remove':
+                        hookFunc = removeObject;
+                        break;
                     case 'list::remove':
                     case 'page::remove':
                         hookFunc = removeObjects;
@@ -1252,29 +1205,62 @@ function runHook(query, hookName, input, defaultBehavior) {
         }
     }
     if (query.type === 'object') {
+        var impact;
         if (query.object) {
-            return hookFunc(query.object, input);
+            impact = hookFunc(query.object, input);
         } else {
             // need to run query again, in case the data currently in flight
             // is already stale
-            return true;
+            impact = true;
         }
+        if (impact === false) {
+            return false;
+        }
+        if (impact instanceof Object) {
+            var object = impact;
+            query.object = object;
+            query.promise = Promise.resolve(object);
+        } else {
+            query.dirty = true;
+        }
+        return true;
     } else if (query.type === 'page' || query.type === 'list') {
+        var impact;
         if (query.objects) {
             // get rid of null and sort list by ID or URL
             input = input.filter(Boolean);
             sortObjects(input);
-            return hookFunc(query.objects, input);
+            impact = hookFunc(query.objects, input);
         } else {
-            return true;
+            // see above
+            impact = true;
         }
+        if (impact === false) {
+            return false;
+        }
+        if (impact instanceof Array) {
+            var objects = impact;
+            if (query.type === 'list') {
+                // update the total
+                var diff = objects.length - query.objects.length;
+                objects.total = query.objects.total + diff;
+
+                // restore more function
+                objects.more = query.objects.more;
+            }
+            query.objects = objects;
+            query.promise = Promise.resolve(objects);
+        } else {
+            query.dirty = true;
+        }
+        return true;
     }
 }
 
 /**
  * Return false to indicate that change should be ignored
  *
- * @return {Boolean}
+ * @return {false}
  */
 function ignoreChange() {
     return false;
@@ -1283,7 +1269,7 @@ function ignoreChange() {
 /**
  * Return true to indicate that query should be rerun
  *
- * @return {Boolean}
+ * @return {true}
  */
 function refreshQuery() {
     return true;
@@ -1373,6 +1359,18 @@ function pushObjects(objects, newObjects) {
         }
     });
     return (changed) ? newList : false;
+}
+
+/**
+ * Return true to indicate that query should be removed
+ *
+ * @param  {Object} object
+ * @param  {Object} deletedOBject
+ *
+ * @return {true}
+ */
+function removeObject(object, deletedOBject) {
+    return true;
 }
 
 /**
@@ -1727,10 +1725,45 @@ function removeObjectsOutsideFolder(objects, folderURL) {
     });
 }
 
-function getTime(diff) {
+/**
+ * Get parameter 'minimum' from options. If it's a percent, then calculate the
+ * minimum object count based on total. If it's negative, substract the value
+ * from the total.
+ *
+ * @param  {Object} options
+ * @param  {Number} total
+ * @param  {Number} def
+ *
+ * @return {Number}
+ */
+function getMinimum(options, total, def) {
+    let minimum = (options) ? options.minimum : undefined;
+    if (typeof(minimum) === 'string') {
+        if (minimum.charAt(minimum.length - 1) === '%') {
+            let percent = parseInt(minimum);
+            minimum = Math.ceil(total * (percent / 100));
+        }
+    }
+    if (minimum < 0) {
+        minimum = total - minimum;
+        if (minimum < 1) {
+            minimum = 1;
+        }
+    }
+    return minimum || def;
+}
+
+/**
+ * Return the current time in ISO format, adding a delta optionally
+ *
+ * @param  {Number|undefined} delta
+ *
+ * @return {String}
+ */
+function getTime(delta) {
     var date = new Date;
-    if (diff) {
-        date = new Date(date.getTime() + diff);
+    if (delta) {
+        date = new Date(date.getTime() + delta);
     }
     return date.toISOString();
 }
