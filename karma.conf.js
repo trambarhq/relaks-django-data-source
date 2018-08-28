@@ -8,10 +8,11 @@ module.exports = function(config) {
         autoWatch: true,
         singleRun: false,
         browsers: [ 'Chrome' ],
-        frameworks: [ 'chai', 'mocha' ],
+        frameworks: [ 'chai', 'mocha', 'server-side' ],
         files: [
             'tests.bundle.js',
         ],
+        concurrency: 1,
 
         preprocessors: {
             'tests.bundle.js': [ 'webpack', 'sourcemap' ]
@@ -23,6 +24,7 @@ module.exports = function(config) {
             'karma-mocha',
             'karma-sourcemap-loader',
             'karma-webpack',
+            'karma-server-side',
         ],
 
         reporters: [ 'progress' ],
@@ -36,7 +38,7 @@ module.exports = function(config) {
                         loader: 'babel-loader',
                         exclude: Path.resolve('./node_modules'),
                         query: {
-                            presets: [ 'es2015', 'react' ]
+                            presets: [ 'env' ]
                         }
                     }
                 ]
@@ -47,15 +49,7 @@ module.exports = function(config) {
                     return Path.resolve(`./${folder}`);
                 })
             },
-            externals: {
-                'react/addons': true,
-                'react/lib/ExecutionEnvironment': true,
-                'react/lib/ReactContext': true,
-
-                // these exist only in React 15.5+
-                'react-dom/test-utils': true,
-                'react-test-renderer/shallow': true,
-            }
+            externals: {}
         },
 
         webpackMiddleware: {
