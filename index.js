@@ -910,7 +910,7 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
     return this.post(loginAbsURL, credentials).then(function(response) {
         var token = (response) ? response.key : null;
         if (!token) {
-            throw new Error('No authorization token');
+            throw new RelaksDjangoDataSourceError(403, 'No authorization token');
         }
         return _this.authorize(loginURL, token, allowURLs);
     });
@@ -1013,7 +1013,7 @@ prototype.revokeAuthorization = function(logoutURL) {
         if (response.status < 400) {
             return response.json();
         } else {
-            throw new Error(response.statusText);
+            throw new RelaksDjangoDataSourceError(response.status, response.statusText);
         }
     }).then(function(response) {
         this.authorizations = this.authorizations.filter(function(authorization) {
@@ -1143,11 +1143,11 @@ prototype.request = function(url, options) {
                     delete options.headers['Authorization'];
                     return _this.request(url, options);
                 } else {
-                    throw new Error(response.statusText);
+                    throw new RelaksDjangoDataSourceError(response.status, response.statusText);
                 }
             });
         } else {
-            throw new Error(response.statusText);
+            throw new RelaksDjangoDataSourceError(response.status, response.statusText);
         }
     });
 };
@@ -1201,7 +1201,10 @@ function runHook(query, hookName, input, defaultBehavior) {
                         hookFunc = removeObjects;
                         break;
                     default:
-                        throw new Error('Unknown hook name: ' + hookFunc)
+                        if (process.env.NODE_ENV !== 'production') {
+                            console.warn('Unknown hook "' + hookFunc + '"');
+                        }
+                        hookFunc = refreshQuery;
                 }
         }
     }
@@ -1796,6 +1799,14 @@ prototype.waitForDecision = function() {
     return this.decisionPromise || Promise.resolve();
 };
 
+function RelaksDjangoDataSourceError(status, message) {
+    this.status = status;
+    this.message = message;
+}
+
+RelaksDjangoDataSourceError.prototype = Object.create(Error.prototype)
+
 module.exports = RelaksDjangoDataSource;
 module.exports.RelaksDjangoDataSource = RelaksDjangoDataSource;
 module.exports.RelaksDjangoDataSourceEvent = RelaksDjangoDataSourceEvent;
+module.exports.RelaksDjangoDataSourceError = RelaksDjangoDataSourceError;
