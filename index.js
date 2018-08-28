@@ -163,7 +163,7 @@ prototype.fetchPage = function(url, page, options) {
     var absURL = this.resolveURL(url);
     var props = {
         type: 'page',
-        url: url,
+        url: absURL,
         page: page,
         options: options || {},
     };
@@ -172,7 +172,15 @@ prototype.fetchPage = function(url, page, options) {
         var pageURL = attachPageNumber(absURL, page);
         query = props;
         query.promise = this.get(pageURL).then(function(response) {
-            var objects = response.results;
+            var objects, count;
+            if (response instanceof Array) {
+                objects = response;
+                count = objects.length;
+            } else {
+                objects = response.results;
+                count = response.count;
+            }
+            objects.total = count;
             _this.updateQuery(query, {
                 objects: objects,
                 retrievalTime: getTime(),
@@ -1569,7 +1577,7 @@ function attachPageNumber(url, page) {
     }
     var qi = url.indexOf('?');
     var sep = (qi === -1) ? '?' : '&';
-    return sep + 'page=' + page;
+    return url + sep + 'page=' + page;
 }
 
 function waitForNextPage(query) {

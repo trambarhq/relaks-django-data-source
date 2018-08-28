@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
 
-describe('Basic HTTP operations', function() {
+describe('Basic HTTP operations:', function() {
     before(function() {
         return TestServer.start(7777);
     })

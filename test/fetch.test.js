@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
 
-describe('Fetch methods', function() {
+describe('Fetch methods:', function() {
     before(function() {
         return TestServer.start(7777);
     })
@@ -83,6 +83,15 @@ describe('Fetch methods', function() {
                         .that.equals(100);
                 });
             })
+            it ('should fail with status code 404 when object type does not exist', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                return dataSource.fetchList(`/jobs/`).then((object) => {
+                    throw new Error('Operation should fail');
+                }, (err) => {
+                    expect(err).to.be.an.instanceof(Error);
+                    expect(err).to.have.property('status').that.equals(404);
+                });
+            })
         })
         describe('(pagination)', function() {
             before(function() {
@@ -133,6 +142,65 @@ describe('Fetch methods', function() {
                     });
                 });
             })
+        })
+    })
+    describe('#fetchPage()', function() {
+        before(function() {
+            return TestServer.reset({ pagination: true, perPage: 20 });
+        })
+
+        it ('should fetch the first page, with total attached to result', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchPage(`/tasks/`, 1).then((objects) => {
+                expect(objects).to.be.an.instanceof(Array)
+                    .that.has.property('length', 20);
+                expect(objects).to.have.property('total')
+                    .that.equals(100);
+            });
+        })
+        it ('should fetch the second page', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchPage(`/tasks/`, 2).then((objects) => {
+                expect(objects).to.be.an.instanceof(Array)
+                    .that.has.property('length', 20);
+                expect(objects[0]).to.have.property('id', 21);
+            });
+        })
+        it ('should cache objects', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchPage(`/tasks/`, 2).then((objects1) => {
+                return dataSource.fetchPage(`/tasks/`, 2).then((objects2) => {
+                    expect(objects2).to.equal(objects1);
+                });
+            });
+        })
+        it ('should cache objects for fetchOne() as well', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchPage(`/tasks/`, 3).then((objects) => {
+                var object1 = objects[3]
+                return dataSource.fetchOne(`/tasks/${object1.id}/`).then((object2) => {
+                    expect(object2).to.equal(object1);
+                });
+            });
+        })
+        it ('should not provide objects to fetchOne() when abbreviated is set', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { abbreviated: true };
+            return dataSource.fetchPage(`/tasks/`, 3, options).then((objects) => {
+                var object1 = objects[3]
+                return dataSource.fetchOne(`/tasks/${object1.id}/`).then((object2) => {
+                    expect(object2).to.not.equal(object1);
+                });
+            });
+        })
+        it ('should fail with status code 404 when object type does not exist', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchList(`/jobs/`).then((object) => {
+                throw new Error('Operation should fail');
+            }, (err) => {
+                expect(err).to.be.an.instanceof(Error);
+                expect(err).to.have.property('status').that.equals(404);
+            });
         })
     })
 

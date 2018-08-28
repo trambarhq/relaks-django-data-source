@@ -2,12 +2,12 @@ import { expect } from 'chai';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
 
-describe('Update methods', function() {
+describe('Update methods:', function() {
     before(function() {
         return TestServer.start(7777);
     })
 
-    describe('#updateOne', function() {
+    describe('#updateOne()', function() {
         var dataSource = new DjangoDataSource({
             baseURL: 'http://localhost:7777/api'
         });
