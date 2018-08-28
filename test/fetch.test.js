@@ -126,6 +126,38 @@ describe('Fetch methods:', function() {
                     });
                 });
             })
+            it ('should fetch enough records to meet minimum requirement', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: 25 };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    // 15 * 2 > 25
+                    expect(objects).to.have.property('length', 30);
+                });
+            })
+            it ('should interpret negative minimum as that amount off the total', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: -25 };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    // 15 * 5 = 100 - 25
+                    expect(objects).to.have.property('length', 75);
+                });
+            })
+            it ('should handle minimum specified as percentage', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: ' 25% ' };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    // 15 * 2 > 100 * 25%
+                    expect(objects).to.have.property('length', 30);
+                });
+            })
+            it ('should handle minimum specified as negative percentage', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: ' -20% ' };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    // 15 * 6 > 100 - (100 * 20)%
+                    expect(objects).to.have.property('length', 90);
+                });
+            })
         })
         describe('(URL keys)', function() {
             before(function() {

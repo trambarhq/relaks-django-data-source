@@ -1761,7 +1761,7 @@ function getMinimum(options, total, def) {
         }
     }
     if (minimum < 0) {
-        minimum = total - minimum;
+        minimum = total + minimum;
         if (minimum < 1) {
             minimum = 1;
         }
