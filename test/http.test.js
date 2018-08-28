@@ -1,5 +1,4 @@
 import { expect } from 'chai';
-import RelaksRouteManager from '../index';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
 
