@@ -71,7 +71,7 @@ function stop() {
 
 function reset(options) {
     currentOptions = Object.assign({}, defaultOptions, options);
-    nextId = 1;
+    nextID = 1;
     testData = [];
     for (var i = 1; i <= 100; i++) {
         testData.push(createTestObject());
@@ -84,11 +84,11 @@ var defaultOptions = {
     urlKeys: false,
 };
 var currentOptions;
-var nextId;
+var nextID;
 var testData;
 
 function createTestObject() {
-    var id = nextId++;
+    var id = nextID++;
     return {
         id: id,
         title: `Task #${id}`,
@@ -98,6 +98,9 @@ function createTestObject() {
 }
 
 function transformObject(object) {
+    if (!currentOptions.urlKeys) {
+        return object;
+    }
     var url = getObjectURL(object);
     var newObject = { url };
     for (var name in object) {
@@ -127,19 +130,14 @@ function handleListFetch(req, res) {
         var perPage = currentOptions.perPage;
         var start = (page - 1) * currentOptions.perPage;
         var end = start + currentOptions.perPage;
-        var results = testData.slice(start, end)
+        var objects = testData.slice(start, end)
         var count = testData.length;
         var next = (end < count) ? getPageURL(page + 1) : null;
         var prev = (page > 1) ? getPageURL(page - 1) : null;
-        if (currentOptions.urlKeys) {
-            results = results.map(transformObject);
-        }
+        var results = objects.map(transformObject);
         res.json({ count, next, prev, results });
     } else {
-        var results = testData;
-        if (currentOptions.urlKeys) {
-            results = results.map(transformObject);
-        }
+        var results = testData.map(transformObject);
         res.json(results);
     }
 }
@@ -149,32 +147,53 @@ function handleObjectFetch(req, res) {
     var object = testData.find((object) => {
         return (object.id === id);
     });
-    if (object) {
-        res.json(object);
-    } else {
+    if (!object) {
         res.sendStatus(404);
+        return;
     }
+    var result = transformObject(object);
+    res.json(result);
 }
 
 function handleObjectInsert(req, res) {
-
+    var object = { id: nextID++ };
+    var props = req.body;
+    if (props.id !== object.id && props.hasOwnProperty('id')) {
+        res.sendStatus(400);
+        return;
+    }
+    Object.assign(object, props);
+    testData.push(object);
+    var result = transformObject(object);
+    res.json(result);
 }
 
 function handleObjectUpdate(req, res) {
+    var props = req.body;
     var id = parseInt(req.params.id);
     var object = testData.find((object) => {
         return (object.id === id);
     });
-    if (object) {
-        Object.assign(object, req.body);
-        res.json(object);
-    } else {
+    if (!object) {
         res.sendStatus(404);
+        return;
     }
+    Object.assign(object, props);
+    var result = transformObject(object);
+    res.json(result);
 }
 
 function handleObjectDelete(req, res) {
-
+    var id = parseInt(req.params.id);
+    var newList = testData.filter((object) => {
+        return (object.id === id);
+    });
+    if (newList.length === testData.length) {
+        res.sendStatus(404);
+        return;
+    }
+    testData = newList;
+    res.end();
 }
 
 function handleTestRequest(req, res) {

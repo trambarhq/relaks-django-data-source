@@ -2,18 +2,20 @@ import { expect } from 'chai';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
 
+var port = 7777;
+var baseURL = `http://localhost:${port}/api`;
+
 describe('Fetch methods:', function() {
     before(function() {
-        return TestServer.start(7777);
+        return TestServer.start(port);
     })
-    var baseURL = 'http://localhost:7777/api';
 
     describe('#fetchOne', function() {
         it ('should fetch an object from remote server', function() {
             var dataSource = new DjangoDataSource({ baseURL });
             return dataSource.fetchOne(`/tasks/5/`).then((object) => {
-                expect(object).to.have.property('id').that.equals(5);
-                expect(object).to.have.property('category').that.equals('drinking');
+                expect(object).to.have.property('id', 5);
+                expect(object).to.have.property('category', 'drinking');
             })
         })
         it ('should cache an object', function() {
@@ -30,7 +32,7 @@ describe('Fetch methods:', function() {
                 throw new Error('Operation should fail');
             }, (err) => {
                 expect(err).to.be.an.instanceof(Error);
-                expect(err).to.have.property('status').that.equals(404);
+                expect(err).to.have.property('status', 404);
             });
         })
     })
@@ -89,7 +91,7 @@ describe('Fetch methods:', function() {
                     throw new Error('Operation should fail');
                 }, (err) => {
                     expect(err).to.be.an.instanceof(Error);
-                    expect(err).to.have.property('status').that.equals(404);
+                    expect(err).to.have.property('status', 404);
                 });
             })
         })
@@ -231,7 +233,7 @@ describe('Fetch methods:', function() {
                 throw new Error('Operation should fail');
             }, (err) => {
                 expect(err).to.be.an.instanceof(Error);
-                expect(err).to.have.property('status').that.equals(404);
+                expect(err).to.have.property('status', 404);
             });
         })
     })
