@@ -331,6 +331,7 @@ prototype.fetchMultiple = function(urls, options) {
             fetchOptions[name] = options[name];
         }
     }
+    var cachedResults = [];
     var promises = urls.map(function(url) {
         var absURL = _this.resolveURL(url);
         var props = { url: absURL, type: 'object' };
@@ -340,8 +341,10 @@ prototype.fetchMultiple = function(urls, options) {
         }
         if (query && query.object) {
             cached++;
+            cachedResults.push(query.object);
             return query.object;
         } else {
+            cachedResults.push(null);
             return _this.fetchOne(absURL, fetchOptions);
         }
     });
@@ -362,17 +365,8 @@ prototype.fetchMultiple = function(urls, options) {
             completeListPromise.then(function(objects) {
                 _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
             });
-            return promises.map(function(object) {
-                if (object.then instanceof Function) {
-                    return null;    // a promise--don't return it
-                } else {
-                    return object;
-                }
-            });
-        } else {
-            // list is complete already
-            return promises;
         }
+        return Promise.resolve(cachedResults);
     }
 };
 

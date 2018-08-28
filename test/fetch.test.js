@@ -235,6 +235,70 @@ describe('Fetch methods:', function() {
             });
         })
     })
+    describe('#fetchMultiple()', function() {
+        before(function() {
+            return TestServer.reset();
+        })
+
+        it ('should fetch multiple objects', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var urls = [];
+            for (var i = 1; i <= 20; i += 2) {
+                urls.push(`/tasks/${i}`);
+            }
+            return dataSource.fetchMultiple(urls).then((objects) => {
+                expect(objects).to.have.property('length', 10);
+            });
+        })
+        it ('should return partial results when the number meet the mimimum specified', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var urls = [];
+            for (var i = 1; i <= 20; i += 2) {
+                urls.push(`/tasks/${i}`);
+            }
+            return dataSource.fetchMultiple(urls).then((objects) => {
+                var urls = [];
+                for (var i = 1; i <= 20; i += 1) {
+                    urls.push(`/tasks/${i}`);
+                }
+                var options = { minimum: '50%' };
+                return dataSource.fetchMultiple(urls, options).then((objects) => {
+                    expect(objects).to.have.property('length', 20);
+                    expect(objects.filter(Boolean)).to.have.property('length', 10);
+                    expect(objects[1]).to.be.null;
+                });
+            });
+        })
+        it ('should trigger change event once full list becomes available', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var urls = [];
+            for (var i = 1; i <= 20; i += 2) {
+                urls.push(`/tasks/${i}`);
+            }
+            return dataSource.fetchMultiple(urls).then((objects) => {
+                var urls = [];
+                for (var i = 1; i <= 20; i += 1) {
+                    urls.push(`/tasks/${i}`);
+                }
+                var options = { minimum: '50%' };
+                return dataSource.fetchMultiple(urls, options).then((objects) => {
+                    expect(objects.filter(Boolean)).to.have.property('length', 10);
+                    return new Promise((resolve, reject) => {
+                        // only got half the list
+                        dataSource.addEventListener('change', resolve);
+                        setTimeout(reject, 100);
+                    });
+                }).then((evt) => {
+                    expect(evt).to.have.property('type', 'change');
+
+                    return dataSource.fetchMultiple(urls, options).then((objects) => {
+                        // all objects should be there
+                        expect(objects.filter(Boolean)).to.have.property('length', 20);
+                    });
+                });
+            });
+        })
+    })
 
     after(function() {
         return TestServer.stop();
