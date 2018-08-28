@@ -9,6 +9,7 @@ module.exports = {
 };
 
 var server;
+var serverPort;
 
 function start(port) {
     // restart options and test data
@@ -36,6 +37,7 @@ function start(port) {
     return new Promise((resolve, reject) => {
         try {
             server = app.listen(port, resolve);
+            serverPort = port;
 
             // break connections on shutdown
             var connections = {};
@@ -62,6 +64,7 @@ function stop() {
     return new Promise((resolve, reject) => {
         if (server) {
             server.destroy(resolve);
+            server = null;
         }
     });
 }
@@ -70,13 +73,13 @@ function reset(options) {
     currentOptions = Object.assign({}, defaultOptions, options);
     nextId = 1;
     testData = [];
-    for (var i = 1; i < 100; i++) {
+    for (var i = 1; i <= 100; i++) {
         testData.push(createTestObject());
     }
 }
 
 var defaultOptions = {
-    paginated: false,
+    pagination: false,
     perPage: 10,
     urlKeys: false,
 };
@@ -94,8 +97,51 @@ function createTestObject() {
     };
 }
 
-function handleListFetch(req, res) {
+function transformObject(object) {
+    var url = getObjectURL(object);
+    var newObject = { url };
+    for (var name in object) {
+        if (name !== 'id') {
+            newObject[name] = object[name];
+        }
+    }
+    return newObject;
+}
 
+function getPageURL(page) {
+    var url = `http://localhost:${serverPort}/api/tasks/`;
+    if (page > 0) {
+        url += `?page=${page}`;
+    }
+    return url;
+}
+
+function getObjectURL(object) {
+    return `http://localhost:${serverPort}/api/tasks/${object.id}/`;
+}
+
+function handleListFetch(req, res) {
+    var objects;
+    if (currentOptions.pagination) {
+        var page = parseInt(req.query.page) || 1;
+        var perPage = currentOptions.perPage;
+        var start = (page - 1) * currentOptions.perPage;
+        var end = start + currentOptions.perPage;
+        var results = testData.slice(start, end)
+        var count = testData.length;
+        var next = (end < count) ? getPageURL(page + 1) : null;
+        var prev = (page > 1) ? getPageURL(page - 1) : null;
+        if (currentOptions.urlKeys) {
+            results = results.map(transformObject);
+        }
+        res.json({ count, next, prev, results });
+    } else {
+        var results = testData;
+        if (currentOptions.urlKeys) {
+            results = results.map(transformObject);
+        }
+        res.json(results);
+    }
 }
 
 function handleObjectFetch(req, res) {

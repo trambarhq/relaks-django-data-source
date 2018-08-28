@@ -14,7 +14,7 @@ var serverProxy = {
         });
     },
     reset: function(options) {
-        return Server.run(options, function(options) {
+        return Server.run(options || {}, function(options) {
             var TestServer = serverRequire('./test/lib/test-server-node');
             return TestServer.reset(options);
         });

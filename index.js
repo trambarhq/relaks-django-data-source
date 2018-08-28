@@ -797,6 +797,7 @@ prototype.deriveQuery = function(props) {
     var _this = this;
     var object;
     var folderURL = getFolderURL(props.url);
+    var objectID = parseInt(props.url.substr(folderURL.length));
     this.queries.some(function(query) {
         if (query.type === 'page' || query.type === 'list') {
             var abbreviated = false;
@@ -809,6 +810,8 @@ prototype.deriveQuery = function(props) {
                 if (matchURL(query.url, folderURL)) {
                     query.objects.some(function(item) {
                         if (item.url === props.url) {
+                            object = item;
+                        } else if (item.id === objectID) {
                             object = item;
                         }
                     });

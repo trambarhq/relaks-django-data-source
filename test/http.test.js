@@ -8,32 +8,32 @@ describe('Basic HTTP operations', function() {
     })
 
     describe('#get()', function() {
-        var dataSource = new DjangoDataSource;
         it ('should be able to perform a GET request', function() {
+            var dataSource = new DjangoDataSource;
             return dataSource.get('http://localhost:7777/test').then((response) => {
                 expect(response).to.have.property('status').that.equals('ok');
             })
         })
     })
     describe('#post()', function() {
-        var dataSource = new DjangoDataSource;
         it ('should be able to perform a POST request', function() {
+            var dataSource = new DjangoDataSource;
             return dataSource.post('http://localhost:7777/test', {}).then((response) => {
                 expect(response).to.have.property('status').that.equals('ok');
             })
         })
     })
     describe('#put()', function() {
-        var dataSource = new DjangoDataSource;
         it ('should be able to perform a PUT request', function() {
+            var dataSource = new DjangoDataSource;
             return dataSource.put('http://localhost:7777/test', {}).then((response) => {
                 expect(response).to.have.property('status').that.equals('ok');
             })
         })
     })
     describe('#delete()', function() {
-        var dataSource = new DjangoDataSource;
         it ('should be able to perform a DELETE request', function() {
+            var dataSource = new DjangoDataSource;
             return dataSource.delete('http://localhost:7777/test', {}).then((response) => {
                 expect(response).to.have.property('status').that.equals('ok');
             })
