@@ -794,12 +794,13 @@ prototype.findQuery = function(props) {
  * @return {Object|undefined}
  */
 prototype.deriveQuery = function(props) {
+    var _this = this;
     var object;
     var folderURL = getFolderURL(props.url);
     this.queries.some(function(query) {
         if (query.type === 'page' || query.type === 'list') {
             var abbreviated = false;
-            if (this.options.abbreviatedFolderContents) {
+            if (_this.options.abbreviatedFolderContents) {
                 abbreviated = true;
             } else if (query.options.abbreviated) {
                 abbreviated = true;
@@ -1739,6 +1740,7 @@ function removeObjectsOutsideFolder(objects, folderURL) {
 function getMinimum(options, total, def) {
     let minimum = (options) ? options.minimum : undefined;
     if (typeof(minimum) === 'string') {
+        minimum = minimum.trim();
         if (minimum.charAt(minimum.length - 1) === '%') {
             let percent = parseInt(minimum);
             minimum = Math.ceil(total * (percent / 100));
