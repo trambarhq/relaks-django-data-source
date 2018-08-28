@@ -115,7 +115,16 @@ function handleObjectInsert(req, res) {
 }
 
 function handleObjectUpdate(req, res) {
-
+    var id = parseInt(req.params.id);
+    var object = testData.find((object) => {
+        return (object.id === id);
+    });
+    if (object) {
+        Object.assign(object, req.body);
+        res.json(object);
+    } else {
+        res.sendStatus(404);
+    }
 }
 
 function handleObjectDelete(req, res) {
