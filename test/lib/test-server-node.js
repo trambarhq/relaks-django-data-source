@@ -186,14 +186,14 @@ function handleObjectUpdate(req, res) {
 function handleObjectDelete(req, res) {
     var id = parseInt(req.params.id);
     var newList = testData.filter((object) => {
-        return (object.id === id);
+        return (object.id !== id);
     });
     if (newList.length === testData.length) {
         res.sendStatus(404);
         return;
     }
     testData = newList;
-    res.end();
+    res.sendStatus(204);
 }
 
 function handleTestRequest(req, res) {

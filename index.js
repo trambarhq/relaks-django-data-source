@@ -645,7 +645,7 @@ prototype.updateOne = function(folderURL, object) {
 };
 
 /**
- * Save multiple objects
+ * Update multiple objects
  *
  * @param  {String} folderURL
  * @param  {Array<Object>} objects
@@ -707,12 +707,33 @@ prototype.updateMultiple = function(folderURL, objects) {
     });
 };
 
-prototype.deleteOne = function(url, object) {
-    return this.deleteMultiple(url, [ object ]).then((results) => {
+/**
+ * Delete an object
+ *
+ * @param  {String} folderURL
+ * @param  {Object} object
+ *
+ * @return {Promise<Object>}
+ */
+prototype.deleteOne = function(folderURL, object) {
+    // allow folderURL to be omitted
+    if (object === undefined && folderURL instanceof Object) {
+        object = folderURL;
+        folderURL = null;
+    }
+    return this.deleteMultiple(folderURL, [ object ]).then((results) => {
         return results[0];
     });
 };
 
+/**
+ * Delete multiple objects
+ *
+ * @param  {String} folderURL
+ * @param  {Array<Object>} objects
+ *
+ * @return {Promise<Array>}
+ */
 prototype.deleteMultiple = function(folderURL, objects) {
     // allow folderURL to be omitted
     if (objects === undefined && folderURL instanceof Array) {
@@ -1139,7 +1160,7 @@ prototype.request = function(url, options) {
     return fetch(url, options).then(function(response) {
         if (response.status < 400) {
             if (response.status == 204) {
-                return '';
+                return null;
             }
             return response.json();
         } else if (response.status === 401) {
