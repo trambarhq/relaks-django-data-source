@@ -43,6 +43,108 @@ describe('Insert methods:', function() {
             })
         })
     })
+    describe('#insertMultiple()', function() {
+        before(function() {
+            return TestServer.reset();
+        })
+
+        it ('should append objects to existing query', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { afterInsert: 'push' };
+            return dataSource.fetchList('/tasks/', options).then((objects) => {
+                var objects = [
+                    {
+                        title: 'Meet attractive women',
+                        description: 'In order to better understand quantum mechanics',
+                        category: 'social',
+                    },
+                    {
+                        title: 'Seduce attractive women',
+                        description: 'To unlock mysteries concerning violations of time reserval symmetry',
+                        category: 'physics',
+                    }
+                ];
+                return dataSource.insertMultiple('/tasks/', objects).then((insertedObjects) => {
+                    return dataSource.fetchList('/tasks/', options).then((objects) => {
+                        expect(objects).to.have.property('length', 102);
+                        expect(objects[100]).to.have.property('category', 'social');
+                        expect(objects[101]).to.have.property('category', 'physics');
+                    });
+                });
+            });
+        });
+        it ('should prepend objects to existing query', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { afterInsert: 'unshift' };
+            return dataSource.fetchList('/tasks/', options).then((objects) => {
+                var objects = [
+                    {
+                        title: 'Meet attractive women',
+                        description: 'In order to better understand quantum mechanics',
+                        category: 'social',
+                    },
+                    {
+                        title: 'Seduce attractive women',
+                        description: 'To unlock mysteries concerning violations of time reserval symmetry',
+                        category: 'physics',
+                    }
+                ];
+                return dataSource.insertMultiple('/tasks/', objects).then((insertedObjects) => {
+                    return dataSource.fetchList('/tasks/', options).then((objects) => {
+                        expect(objects[1]).to.have.property('category', 'social');
+                        expect(objects[0]).to.have.property('category', 'physics');
+                    });
+                });
+            });
+        });
+        it ('should trigger refreshing of list query by default', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchList('/tasks/').then((objects) => {
+                return new Promise((resolve, reject) => {
+                    // promise will resolve when change event occurs
+                    var onChange = () => {
+                        dataSource.removeEventListener('change', onChange);
+                        resolve();
+                    };
+                    dataSource.addEventListener('change', onChange);
+                    setTimeout(reject, 100);
+
+                    var objects = [
+                        {
+                            title: 'Eat cake',
+                            description: '\'Cause there is no bread',
+                            category: 'eating',
+                        },
+                    ];
+                    dataSource.insertMultiple('/tasks/', objects);
+                });
+            }).then(() => {
+                return new Promise((resolve, reject) => {
+                    // wait for another change event
+                    var onChange = () => {
+                        dataSource.removeEventListener('change', onChange);
+                        resolve();
+                    };
+                    dataSource.addEventListener('change', onChange);
+                    setTimeout(reject, 100);
+
+                    // trigger the refreshing
+                    return dataSource.fetchList('/tasks/').then((objects) => {
+                        // we shouldn't see any changes yet
+                        objects.forEach((object) => {
+                            expect(object).to.not.have.property('category', 'eating');
+                        })
+                    });
+                });
+            }).then(() => {
+                return dataSource.fetchList('/tasks/').then((objects) => {
+                    // now the changes show up
+                    var object = objects[objects.length - 1];
+                    expect(object).to.have.property('category', 'eating');
+                });
+            });
+        });
+    })
 
     after(function() {
         return TestServer.stop();
