@@ -89,10 +89,11 @@ prototype.resolveURL = function(url) {
         return url;
     }
     var baseURL = this.options.baseURL;
-    if (!baseURL || /^https?:/.test(url)) {
-        return url;
+    if (baseURL && !/^https?:/.test(url)) {
+        url = removeTrailingSlash(baseURL) + addLeadingSlash(url);
     }
-    return removeTrailingSlash(baseURL) + addLeadingSlash(url);
+    url = addTrailingSlash(url);
+    return url;
 };
 
 /**
@@ -1519,7 +1520,7 @@ function matchAnyURL(url, otherURLs) {
 function removeTrailingSlash(url) {
     var lc = url.charAt(url.length - 1);
     if (lc === '/') {
-        return url.substr(0, url.length - 1);
+        url = url.substr(0, url.length - 1);
     }
     return url;
 }
@@ -1534,7 +1535,24 @@ function removeTrailingSlash(url) {
 function addLeadingSlash(url) {
     var fc = url.charAt(0);
     if (fc !== '/') {
-        return '/' + url;
+        url = '/' + url;
+    }
+    return url;
+}
+
+function addTrailingSlash(url) {
+    var qi = url.indexOf('?');
+    var query;
+    if (qi !== -1) {
+        query = url.substr(qi);
+        url = url.substr(0, qi);
+    }
+    var lc = url.charAt(url.length - 1);
+    if (lc !== '/') {
+        url += '/';
+    }
+    if (query) {
+        url += query;
     }
     return url;
 }

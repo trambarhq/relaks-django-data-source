@@ -14,8 +14,9 @@ describe('Update methods:', function() {
         describe('(numeric keys)', function() {
             it ('should update an object', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                // omitting trailing slash on purpose
                 return dataSource.fetchOne('/tasks/6').then((object) => {
-                    object.category = 'religion';
+                    object = Object.assign({}, object, { category: 'religion' });
                     return dataSource.updateOne('/tasks/', object).then((updatedObject) => {
                         expect(updatedObject).to.have.property('category', 'religion');
 
@@ -61,6 +62,89 @@ describe('Update methods:', function() {
             })
         })
     })
+    describe('#updateMultiple()', function() {
+        before(function() {
+            return TestServer.reset();
+        })
+
+        it ('should replace objects in list query afterward when "replace" is specified', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { afterUpdate: 'replace' };
+            return dataSource.fetchList('/tasks/', options).then((objects) => {
+                var slice = objects.slice(0, 5).map((object) => {
+                    return Object.assign({}, object, { category: 'religion' });
+                });
+                return dataSource.updateMultiple('/tasks/', slice).then((updatedObjects) => {
+                    return dataSource.fetchList('/tasks/', options).then((objects) => {
+                        var slice = objects.slice(0, 5);
+                        slice.forEach((object, index) => {
+                            expect(object).to.equal(updatedObjects[index]);
+                        });
+                    });
+                });
+            });
+        })
+        it ('should not trigger change event when "replace" is specified', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { afterUpdate: 'replace' };
+            return dataSource.fetchList('/tasks/', options).then((objects) => {
+                var slice = objects.slice(0, 5).map((object) => {
+                    return Object.assign({}, object, { category: 'religion' });
+                });
+                return new Promise((resolve, reject) => {
+                    dataSource.addEventListener('change', reject);
+                    setTimeout(resolve, 100);
+                    dataSource.updateMultiple('/tasks/', slice);
+                });
+            });
+        })
+        it ('should trigger refreshing of list query by default', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchList('/tasks/').then((objects) => {
+                return new Promise((resolve, reject) => {
+                    // promise will resolve when change event occurs
+                    var onChange = () => {
+                        dataSource.removeEventListener('change', onChange);
+                        resolve();
+                    };
+                    dataSource.addEventListener('change', onChange);
+                    setTimeout(reject, 100);
+
+                    var slice = objects.slice(10, 15).map((object) => {
+                        return Object.assign({}, object, { category: 'religion' });
+                    });
+                    dataSource.updateMultiple('/tasks/', slice);
+                });
+            }).then(() => {
+                return new Promise((resolve, reject) => {
+                    // wait for another change event
+                    var onChange = () => {
+                        dataSource.removeEventListener('change', onChange);
+                        resolve();
+                    };
+                    dataSource.addEventListener('change', onChange);
+                    setTimeout(reject, 100);
+
+                    // trigger the refreshing
+                    return dataSource.fetchList('/tasks/').then((objects) => {
+                        // we shouldn't see any changes yet
+                        var slice = objects.slice(10, 15);
+                        slice.forEach((object) => {
+                            expect(object).to.have.property('category', 'drinking');
+                        });
+                    });
+                });
+            }).then(() => {
+                return dataSource.fetchList('/tasks/').then((objects) => {
+                    // now the changes show up
+                    var slice = objects.slice(10, 15);
+                    slice.forEach((object) => {
+                        expect(object).to.have.property('category', 'religion');
+                    });
+                });
+            });
+        })
+    });
 
     after(function() {
         return TestServer.stop();
