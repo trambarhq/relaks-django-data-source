@@ -425,11 +425,20 @@ prototype.refreshPage = function(query) {
     var retrievalTime = getTime();
     var pageURL = attachPageNumber(query.url, query.page);
     this.get(pageURL).then(function(response) {
-        var objects = response.results;
+        var objects, count;
+        if (response instanceof Array) {
+            objects = response;
+            count = response.length;
+        } else {
+            objects = response.results
+            count = response.count;
+        }
         var changed = true;
         if (replaceIdentificalObjects(objects, query.objects)) {
             objects = query.objects;
             changed = false;
+        } else {
+            objects.total = count;
         }
         _this.updateQuery(query, {
             objects: objects,
@@ -572,7 +581,7 @@ prototype.refreshList = function(query) {
  * @return {Promise<Object>}
  */
 prototype.insertOne = function(folderURL, object) {
-    return this.insertMultiple(folderURL, [ object ]).then((insertedObjects) => {
+    return this.insertMultiple(folderURL, [ object ]).then(function(insertedObjects) {
         return insertedObjects[0];
     });
 };
@@ -588,10 +597,9 @@ prototype.insertOne = function(folderURL, object) {
 prototype.insertMultiple = function(folderURL, objects) {
     var _this = this;
     var folderAbsURL = this.resolveURL(folderURL);
-    var promises = [];
-    for (var i = 0; i < objects.length; i++) {
-        promises.push(this.post(folderAbsURL, objects[i]));
-    }
+    var promises = objects.map(function(object) {
+        return _this.post(folderAbsURL, object);
+    });
     return Promise.all(promises).then(function(insertedObjects) {
         // sort the newly created objects
         var changed = false;
@@ -640,7 +648,7 @@ prototype.updateOne = function(folderURL, object) {
         object = folderURL;
         folderURL = null;
     }
-    return this.updateMultiple(folderURL, [ object ]).then((results) => {
+    return this.updateMultiple(folderURL, [ object ]).then(function(results) {
         return results[0];
     });
 };
@@ -661,12 +669,10 @@ prototype.updateMultiple = function(folderURL, objects) {
     }
     var _this = this;
     var folderAbsURL = this.resolveURL(folderURL);
-    var promises = [];
-    for (var i = 0; i < objects.length; i++) {
-        var object = objects[i];
+    var promises = objects.map(function(object) {
         var absURL = getObjectURL(folderAbsURL, object);
-        promises.push(absURL ? this.put(absURL, object) : null);
-    }
+        return _this.put(absURL, object);
+    });
     return Promise.all(promises).then(function(updatedObjects) {
         var changed = false;
         _this.queries.forEach(function(query) {
@@ -722,7 +728,7 @@ prototype.deleteOne = function(folderURL, object) {
         object = folderURL;
         folderURL = null;
     }
-    return this.deleteMultiple(folderURL, [ object ]).then((results) => {
+    return this.deleteMultiple(folderURL, [ object ]).then(function(results) {
         return results[0];
     });
 };
@@ -743,18 +749,16 @@ prototype.deleteMultiple = function(folderURL, objects) {
     }
     var _this = this;
     var folderAbsURL = this.resolveURL(folderURL);
-    var promises = [];
-    for (var i = 0; i < objects.length; i++) {
-        var object = objects[i];
+    var promises = objects.map(function(object) {
         var absURL = getObjectURL(folderAbsURL, object);
-        var promise = null;
-        if (absURL) {
-            promise = this.delete(absURL, object).then(function() {
-                return object;
-            });
-        }
-        promises.push(promise);
-    }
+        return _this.delete(absURL, object).then(function() {
+            var deletedObject = {};
+            for (var name in object) {
+                deletedObject[name] = object[name];
+            }
+            return deletedObject;
+        });
+    });
     return Promise.all(promises).then(function(deletedObjects) {
         var changed = false;
         var queries = _this.queries.filter(function(query) {

@@ -126,7 +126,7 @@ describe('Update methods:', function() {
                     setTimeout(reject, 100);
 
                     // trigger the refreshing
-                    return dataSource.fetchList('/tasks/').then((objects) => {
+                    dataSource.fetchList('/tasks/').then((objects) => {
                         // we shouldn't see any changes yet
                         var slice = objects.slice(10, 15);
                         slice.forEach((object) => {

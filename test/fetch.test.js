@@ -119,7 +119,7 @@ describe('Fetch methods:', function() {
                 })
                 return dataSource.fetchList(`/tasks/`).then((objects1) => {
                     return objects1.more().then(function(objects2) {
-                        expect(objects2).to.have.property('length', 30);
+                        expect(objects2).to.have.length(30);
                         expect(changeEvent).to.be.an.object;
 
                         return dataSource.fetchList(`/tasks/`).then((objects3) => {
@@ -133,7 +133,7 @@ describe('Fetch methods:', function() {
                 var options = { minimum: 25 };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 2 > 25
-                    expect(objects).to.have.property('length', 30);
+                    expect(objects).to.have.length(30);
                 });
             })
             it ('should interpret negative minimum as that amount off the total', function() {
@@ -141,7 +141,7 @@ describe('Fetch methods:', function() {
                 var options = { minimum: -25 };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 5 = 100 - 25
-                    expect(objects).to.have.property('length', 75);
+                    expect(objects).to.have.length(75);
                 });
             })
             it ('should handle minimum specified as percentage', function() {
@@ -149,7 +149,7 @@ describe('Fetch methods:', function() {
                 var options = { minimum: ' 25% ' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 2 > 100 * 25%
-                    expect(objects).to.have.property('length', 30);
+                    expect(objects).to.have.length(30);
                 });
             })
             it ('should handle minimum specified as negative percentage', function() {
@@ -157,7 +157,7 @@ describe('Fetch methods:', function() {
                 var options = { minimum: ' -20% ' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 6 > 100 - (100 * 20)%
-                    expect(objects).to.have.property('length', 90);
+                    expect(objects).to.have.length(90);
                 });
             })
         })
@@ -249,7 +249,7 @@ describe('Fetch methods:', function() {
                 urls.push(`/tasks/${i}`);
             }
             return dataSource.fetchMultiple(urls).then((objects) => {
-                expect(objects).to.have.property('length', 10);
+                expect(objects).to.have.length(10);
             });
         })
         it ('should return partial results when the number meet the mimimum specified', function() {
@@ -265,8 +265,8 @@ describe('Fetch methods:', function() {
                 }
                 var options = { minimum: '50%' };
                 return dataSource.fetchMultiple(urls, options).then((objects) => {
-                    expect(objects).to.have.property('length', 20);
-                    expect(objects.filter(Boolean)).to.have.property('length', 10);
+                    expect(objects).to.have.length(20);
+                    expect(objects.filter(Boolean)).to.have.length(10);
                     expect(objects[1]).to.be.null;
                 });
             });
@@ -284,7 +284,7 @@ describe('Fetch methods:', function() {
                 }
                 var options = { minimum: '50%' };
                 return dataSource.fetchMultiple(urls, options).then((objects) => {
-                    expect(objects.filter(Boolean)).to.have.property('length', 10);
+                    expect(objects.filter(Boolean)).to.have.length(10);
                     return new Promise((resolve, reject) => {
                         // only got half the list
                         dataSource.addEventListener('change', resolve);
@@ -295,7 +295,7 @@ describe('Fetch methods:', function() {
 
                     return dataSource.fetchMultiple(urls, options).then((objects) => {
                         // all objects should be there
-                        expect(objects.filter(Boolean)).to.have.property('length', 20);
+                        expect(objects.filter(Boolean)).to.have.length(20);
                     });
                 });
             });

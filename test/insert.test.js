@@ -66,7 +66,7 @@ describe('Insert methods:', function() {
                 ];
                 return dataSource.insertMultiple('/tasks/', objects).then((insertedObjects) => {
                     return dataSource.fetchList('/tasks/', options).then((objects) => {
-                        expect(objects).to.have.property('length', 102);
+                        expect(objects).to.have.length(102);
                         expect(objects[100]).to.have.property('category', 'social');
                         expect(objects[101]).to.have.property('category', 'physics');
                     });
