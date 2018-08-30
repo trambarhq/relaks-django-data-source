@@ -131,16 +131,16 @@ prototype.fetchOne = function(url, options) {
         query = this.deriveQuery(props);
     }
     if (!query) {
+        var time = getTime();
         query = props;
         query.promise = this.get(absURL).then(function(response) {
             var object = response;
-            _this.updateQuery(query, {
-                object: object,
-                retrievalTime: getTime(),
-            });
+            query.object = object;
+            query.time = time;
+            _this.removeExcessQueries();
             return object;
         });
-        this.addQuery(query);
+        this.queries.unshift(query);
     }
     return query.promise.then(function(object) {
         if (query.dirty)  {
@@ -171,24 +171,24 @@ prototype.fetchPage = function(url, page, options) {
     var query = this.findQuery(props);
     if (!query) {
         var pageURL = attachPageNumber(absURL, page);
+        var time = getTime();
         query = props;
         query.promise = this.get(pageURL).then(function(response) {
-            var objects, count;
+            var objects, total;
             if (response instanceof Array) {
                 objects = response;
-                count = objects.length;
+                total = objects.length;
             } else {
                 objects = response.results;
-                count = response.count;
+                total = response.count;
             }
-            objects.total = count;
-            _this.updateQuery(query, {
-                objects: objects,
-                retrievalTime: getTime(),
-            });
+            objects.total = total;
+            query.objects = objects;
+            query.time = time;
+            _this.removeExcessQueries();
             return objects;
         });
-        this.addQuery(query)
+        this.queries.push(query);
     }
     return query.promise.then(function(objects) {
         if (query.dirty)  {
@@ -218,7 +218,7 @@ prototype.fetchList = function(url, options) {
     if (!query) {
         query = props;
         query.promise = this.fetchNextPage(query, true);
-        this.addQuery(query);
+        this.queries.push(query);
     }
     return query.promise.then(function(objects) {
         if (query.dirty)  {
@@ -252,31 +252,30 @@ prototype.fetchNextPage = function(query, initial) {
         return query.nextPromise;
     }
     var _this = this;
+    var time = getTime();
     var nextURL = (initial) ? query.url : query.nextURL;
     var nextPromise = this.get(nextURL).then(function(response) {
         if (response instanceof Array) {
             // the full list is returned
             var objects = response;
-            _this.updateQuery(query, {
-                objects: objects,
-                retrievalTime: getTime(),
-                nextPromise: null,
-            });
             objects.more = _this.fetchNoMore.bind(_this, query);
             objects.total = objects.length;
+            query.objects = objects;
+            query.time = time;
+            query.nextPromise = null;
             return objects;
         } else if (response instanceof Object) {
             // append retrieved objects to list
             var total = response.count;
             var objects = appendObjects(query.objects, response.results);
-            _this.updateQuery(query, {
-                objects: objects,
-                promise: nextPromise,
-                retrievalTime: (initial) ? getTime() : query.retrievalTime,
-                nextURL: response.next,
-                nextPage: (query.nextPage || 1) + 1,
-                nextPromise: null,
-            });
+            query.objects = objects;
+            query.promise = nextPromise;
+            query.nextPromise = null;
+            query.nextURL = response.next;
+            query.nextPage = (query.nextPage || 1) + 1;
+            if (initial) {
+                query.time = time;
+            }
 
             // attach function to results so caller can ask for more results
             if (query.nextURL) {
@@ -302,12 +301,12 @@ prototype.fetchNextPage = function(query, initial) {
         }
     }).catch(function(err) {
         if (!initial) {
-            _this.updateQuery(query, { nextPromise: null });
+            query.nextPromise = null;
         }
         throw err;
     });
     if (!initial) {
-        _this.updateQuery(query, { nextPromise });
+        query.nextPromise = nextPromise;
     }
     return nextPromise;
 };
@@ -382,29 +381,22 @@ prototype.refreshOne = function(query) {
         return;
     }
     console.log('Refreshing object', query);
-    this.updateQuery(query, { refreshing: true });
+    query.refreshing = true;
 
     var _this = this;
-    var retrievalTime = getTime();
+    var time = getTime();
     this.get(query.url).then(function(response) {
         var object = response;
-        var changed = true;
-        if (matchObject(object, query.object)) {
-            object = query.object;
-            changed = false;
-        }
-        _this.updateQuery(query, {
-            object: object,
-            promise: Promise.resolve(object),
-            retrievalTime: retrievalTime,
-            refreshing: false,
-            dirty: false,
-        });
-        if (changed) {
+        query.time = time;
+        query.refreshing = false;
+        query.dirty = false;
+        if (!matchObject(object, query.object)) {
+            query.object = object;
+            query.promise = Promise.resolve(object);
             _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
         }
     }).catch(function(err) {
-        _this.updateQuery(query, { refreshing: false });
+        query.refreshing = false;
     });
 };
 
@@ -419,39 +411,32 @@ prototype.refreshPage = function(query) {
         return;
     }
     console.log('Refreshing page', query.url);
-    this.updateQuery(query, { refreshing: true });
+    query.refreshing = true;
 
     var _this = this;
-    var retrievalTime = getTime();
+    var time = getTime();
     var pageURL = attachPageNumber(query.url, query.page);
     this.get(pageURL).then(function(response) {
-        var objects, count;
+        var objects, total;
         if (response instanceof Array) {
             objects = response;
-            count = response.length;
+            total = response.length;
         } else {
             objects = response.results
-            count = response.count;
+            total = response.count;
         }
-        var changed = true;
-        if (replaceIdentificalObjects(objects, query.objects)) {
-            objects = query.objects;
-            changed = false;
-        } else {
-            objects.total = count;
-        }
-        _this.updateQuery(query, {
-            objects: objects,
-            promise: Promise.resolve(objects),
-            retrievalTime: retrievalTime,
-            refreshing: false,
-            dirty: false,
-        })
-        if (changed) {
+
+        query.time = time;
+        query.refreshing = false;
+        query.dirty = false;
+        if (!replaceIdentificalObjects(objects, query.objects)) {
+            objects.total = total;
+            query.objects = objects;
+            query.promise = Promise.resolve(objects);
             _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
         }
     }).catch(function(err) {
-        _this.updateQuery(query, { refreshing: false });
+        query.refreshing = false;
     });
 };
 
@@ -466,7 +451,7 @@ prototype.refreshList = function(query) {
         return;
     }
     console.log('Refreshing list', query.url);
-    this.updateQuery(query, { refreshing: true });
+    query.refreshing = true;
 
     var _this = this;
     if (query.nextPage) {
@@ -495,78 +480,69 @@ prototype.refreshList = function(query) {
                 return _this.get(nextURL).then(function(response) {
                     pageRemaining--;
                     nextURL = response.next;
+                    if (pageRemaining === 0) {
+                        // set query.nextURL to the URL given by the server
+                        // in the event that new pages have become available
+                        query.nextURL = nextURL;
+                    }
                     refreshedObjects = appendObjects(refreshedObjects, response.results);
+
                     var total = response.count;
                     var objects = joinObjectLists(refreshedObjects, oldObjects);
-                    var changed = true;
-                    objects.more = fetchMoreAfterward;
-                    objects.total = total;
-                    if (replaceIdentificalObjects(objects, query.objects)) {
-                        objects = query.objects;
-                        changed = false;
-                    }
-                    // set query.nextURL to the URL given by the server
-                    // in the event that new pages have become available
-                    _this.updateQuery(query, {
-                        objects: objects,
-                        promise: Promise.resolve(objects),
-                        nextURL: (pageRemaining === 0) ? nextURL : query.nextURL,
-                    });
-                    if (changed) {
+                    if (!replaceIdentificalObjects(objects, query.objects)) {
+                        objects.total = total;
+                        objects.more = fetchMoreAfterward;
+                        query.objects = objects;
+                        query.promise = Promise.resolve(objects);
                         _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
                     }
+
                     // keep going until all pages have been updated
-                    if (pageRemaining > 0 && nextURL && query.nextURL !== nextURL) {
+                    if (query.nextURL !== nextURL) {
                         return refreshNextPage();
                     }
                 });
             };
 
-            var retrievalTime = getTime();
+            var time = getTime();
             refreshNextPage().then(function() {
-                // we're done--reenable fetching of additional pages
+                // we're done
+                query.time = time;
+                query.refreshing = false;
+                query.dirty = false;
+
+                // reenable fetching of additional pages
                 if (query.nextURL) {
                     query.objects.more = _this.fetchNextPage.bind(_this, query, false);
                 } else {
                     query.objects.more = _this.fetchNoMore.bind(_this, query);
                 }
+
                 // trigger it if more() had been called
                 if (morePromise) {
                     query.objects.more().then(moreResolve, moreReject);
                 }
-                _this.updateQuery(query, {
-                    retrievalTime: retrievalTime,
-                    refreshing: false,
-                    dirty: false,
-                });
             }).catch(function(err) {
-                _this.updateQuery(query, { refreshing: false });
+                query.refreshing = false;
             });
         });
     } else {
         // updating un-paginated list
-        var retrievalTime = getTime();
+        var time = getTime();
         this.get(query.url).then(function(response) {
             var objects = response;
-            var changed = true;
-            if (replaceIdentificalObjects(objects, query.objects)) {
-                objects = query.objects;
-                changed = false;
-            }
-            objects.more = _this.fetchNoMore.bind(this, query);
-            objects.total = objects.length;
-            _this.updateQuery(query, {
-                objects: objects,
-                promise: Promise.resolve(objects),
-                retrievalTime: retrievalTime,
-                refreshing: false,
-                dirty: false,
-            });
-            if (changed) {
+            query.time = time;
+            query.refreshing = false;
+            query.dirty = false;
+            if (!replaceIdentificalObjects(objects, query.objects)) {
+                objects.more = _this.fetchNoMore.bind(this, query);
+                objects.total = objects.length;
+                query.objects = objects;
+                query.promise = Promise.resolve(objects);
                 _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
             }
         }).catch(function(err) {
-            _this.updateQuery(query, { refreshing: false });
+            query.refreshing = false;
             throw err;
         });
     }
@@ -858,26 +834,8 @@ prototype.deriveQuery = function(props) {
     }
 }
 
-/**
- * Add a query
- *
- * @param {Object} query
- */
-prototype.addQuery = function(query) {
-    this.queries = [ query ].concat(this.queries);
-};
-
-/**
- * Update a query
- *
- * @param  {Object} query
- * @param  {Object} props
- */
-prototype.updateQuery = function(query, props) {
-    for (var name in props) {
-        query[name] = props[name];
-    }
-};
+prototype.removeExcessQueries = function() {
+}
 
 /**
  * Return a promise that will be resolved when authentication occurs or
@@ -1091,7 +1049,7 @@ prototype.checkExpiration = function() {
     var changed = false;
     var queries = this.queries.filter(function(query) {
         if (!query.dirty) {
-            if (query.retrievalTime < limit) {
+            if (query.time < limit) {
                 query.dirty = true;
                 changed = true;
             }
