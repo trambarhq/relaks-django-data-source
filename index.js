@@ -576,8 +576,10 @@ prototype.insertMultiple = function(folderURL, objects) {
     var promises = objects.map(function(object) {
         return _this.post(folderAbsURL, object);
     });
+    this.stopExpirationCheck();
     return Promise.all(promises).then(function(insertedObjects) {
-        // sort the newly created objects
+        _this.startExpirationCheck();
+
         var changed = false;
         _this.queries.forEach(function(query) {
             insertedObjects.some(function(insertedObject) {
@@ -649,7 +651,10 @@ prototype.updateMultiple = function(folderURL, objects) {
         var absURL = getObjectURL(folderAbsURL, object);
         return _this.put(absURL, object);
     });
+    this.stopExpirationCheck();
     return Promise.all(promises).then(function(updatedObjects) {
+        _this.startExpirationCheck();
+
         var changed = false;
         _this.queries.forEach(function(query) {
             updatedObjects.some(function(updatedObject) {
@@ -735,7 +740,10 @@ prototype.deleteMultiple = function(folderURL, objects) {
             return deletedObject;
         });
     });
+    this.stopExpirationCheck();
     return Promise.all(promises).then(function(deletedObjects) {
+        _this.startExpirationCheck();
+
         var changed = false;
         var queries = _this.queries.filter(function(query) {
             var keep = true;
