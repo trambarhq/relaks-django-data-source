@@ -128,7 +128,7 @@ prototype.fetchOne = function(url, options) {
     };
     var query = this.findQuery(props);
     if (!query) {
-        query = this.deriveQuery(props);
+        query = this.deriveQuery(absURL);
     }
     if (!query) {
         var time = getTime();
@@ -143,7 +143,7 @@ prototype.fetchOne = function(url, options) {
         this.queries.unshift(query);
     }
     return query.promise.then(function(object) {
-        if (query.dirty)  {
+        if (query.expired)  {
             _this.refreshOne(query);
         }
         return object;
@@ -191,7 +191,7 @@ prototype.fetchPage = function(url, page, options) {
         this.queries.push(query);
     }
     return query.promise.then(function(objects) {
-        if (query.dirty)  {
+        if (query.expired)  {
             _this.refreshPage(query);
         }
         return objects;
@@ -221,7 +221,7 @@ prototype.fetchList = function(url, options) {
         this.queries.push(query);
     }
     return query.promise.then(function(objects) {
-        if (query.dirty)  {
+        if (query.expired)  {
             _this.refreshList(query);
         }
         return objects;
@@ -337,7 +337,7 @@ prototype.fetchMultiple = function(urls, options) {
         var props = { url: absURL, type: 'object' };
         var query = _this.findQuery(props);
         if (!query) {
-            query = _this.deriveQuery(props);
+            query = _this.deriveQuery(absURL);
         }
         if (query && query.object) {
             cached++;
@@ -389,7 +389,7 @@ prototype.refreshOne = function(query) {
         var object = response;
         query.time = time;
         query.refreshing = false;
-        query.dirty = false;
+        query.expired = false;
         if (!matchObject(object, query.object)) {
             query.object = object;
             query.promise = Promise.resolve(object);
@@ -428,7 +428,7 @@ prototype.refreshPage = function(query) {
 
         query.time = time;
         query.refreshing = false;
-        query.dirty = false;
+        query.expired = false;
         if (!replaceIdentificalObjects(objects, query.objects)) {
             objects.total = total;
             query.objects = objects;
@@ -509,7 +509,7 @@ prototype.refreshList = function(query) {
                 // we're done
                 query.time = time;
                 query.refreshing = false;
-                query.dirty = false;
+                query.expired = false;
 
                 // reenable fetching of additional pages
                 if (query.nextURL) {
@@ -533,7 +533,7 @@ prototype.refreshList = function(query) {
             var objects = response;
             query.time = time;
             query.refreshing = false;
-            query.dirty = false;
+            query.expired = false;
             if (!replaceIdentificalObjects(objects, query.objects)) {
                 objects.more = _this.fetchNoMore.bind(this, query);
                 objects.total = objects.length;
@@ -587,7 +587,7 @@ prototype.insertMultiple = function(folderURL, objects) {
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
                     var objectFolderURL = getObjectFolderURL(folderAbsURL, insertedObject);
-                    if (!matchURL(query.url, objectFolderURL)) {
+                    if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
                     // it isn't possible to insert objects into multiple folders
@@ -655,7 +655,7 @@ prototype.updateMultiple = function(folderURL, objects) {
             updatedObjects.some(function(updatedObject) {
                 if (query.type === 'object') {
                     var objectURL = getObjectURL(folderAbsURL, updatedObject);
-                    if (!matchURL(query.url, objectURL)) {
+                    if (omitQuery(query.url) !== objectURL) {
                         return false;
                     }
                     var defaultBehavior = 'replace';
@@ -665,7 +665,7 @@ prototype.updateMultiple = function(folderURL, objects) {
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
                     var objectFolderURL = getObjectFolderURL(folderAbsURL, updatedObject);
-                    if (!matchURL(query.url, objectFolderURL)) {
+                    if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
                     // filter out objects that aren't in the same folder
@@ -742,12 +742,12 @@ prototype.deleteMultiple = function(folderURL, objects) {
             deletedObjects.some(function(deletedObject) {
                 if (query.type === 'object') {
                     var objectURL = getObjectURL(folderAbsURL, deletedObject);
-                    if (!matchURL(query.url, objectURL)) {
+                    if (omitQuery(query.url) !== objectURL) {
                         return false;
                     }
                     var defaultBehavior = 'remove';
                     if (runHook(query, 'afterDelete', deletedObject, defaultBehavior)) {
-                        if (query.dirty) {
+                        if (query.expired) {
                             keep = false;
                         }
                         changed = true;
@@ -755,7 +755,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
                     var objectFolderURL = getObjectFolderURL(folderAbsURL, deletedObject);
-                    if (!matchURL(query.url, objectFolderURL)) {
+                    if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
                     // see comment in updateMultiple()
@@ -778,6 +778,77 @@ prototype.deleteMultiple = function(folderURL, objects) {
 };
 
 /**
+ * Mark matching queries as expired
+ *
+ * @param  {Object} props
+ *
+ * @return {Boolean}
+ */
+prototype.invalidate = function(props) {
+    var changed = false;
+    this.queries.forEach((query) => {
+        if (query.expired) {
+            return;
+        }
+        var match = true;
+        for (var name in props) {
+            var value = props[name];
+            if (name === 'url') {
+                if (!matchURL(query.url, value)) {
+                    match = false;
+                    break;
+                }
+            } else if (name === 'time') {
+                if (value instanceof Date) {
+                    value = value.toISOString();
+                }
+                if (query.time > value) {
+                    match = false;
+                }
+            }
+        }
+        if (match) {
+            query.expired = true;
+            changed = true;
+        }
+    });
+    if (changed) {
+        this.triggerEvent(new RelaksDjangoDataSourceEvent('change', this));
+        return true;
+    } else {
+        return false;
+    }
+};
+
+/**
+ * Return true if a URL is cached, with optional check for expiration
+ *
+ * @param  {String} url
+ * @param  {Boolean|undefined} unexpired
+ *
+ * @return {Boolean}
+ */
+prototype.isCached = function(url, unexpired) {
+    var absURL = this.resolveURL(url);
+    var cached = this.queries.some((query) => {
+        if (query.url === absURL) {
+            return (!unexpired || !query.expired);
+        }
+    });
+    if (!cached) {
+        var folderURL = getFolderURL(absURL);
+        if (folderURL) {
+            var objectID = parseInt(absURL.substr(folderURL.length));
+            if (objectID) {
+                var query = this.deriveQuery(absURL);
+                cached = !!query;
+            }
+        }
+    }
+    return cached;
+};
+
+/**
  * Find an existing query
  *
  * @param  {Object} props
@@ -793,16 +864,19 @@ prototype.findQuery = function(props) {
 /**
  * Derive a query for an item from an existing directory query
  *
- * @param  {Object} props
+ * @param  {String} absURL
  *
  * @return {Object|undefined}
  */
-prototype.deriveQuery = function(props) {
+prototype.deriveQuery = function(absURL) {
     var _this = this;
     var object;
-    var folderURL = getFolderURL(props.url);
-    var objectID = parseInt(props.url.substr(folderURL.length));
+    var folderURL = getFolderURL(absURL);
+    var objectID = parseInt(absURL.substr(folderURL.length));
     this.queries.some(function(query) {
+        if (query.expired) {
+            return;
+        }
         if (query.type === 'page' || query.type === 'list') {
             var abbreviated = false;
             if (_this.options.abbreviatedFolderContents) {
@@ -811,15 +885,13 @@ prototype.deriveQuery = function(props) {
                 abbreviated = true;
             }
             if (!abbreviated) {
-                if (matchURL(query.url, folderURL)) {
-                    query.objects.some(function(item) {
-                        if (item.url === props.url) {
+                if (omitQuery(query.url) ===  folderURL) {
+                    return query.objects.some(function(item) {
+                        if (item.url === absURL || item.id === objectID) {
                             object = item;
-                        } else if (item.id === objectID) {
-                            object = item;
+                            return true;
                         }
                     });
-                    return !!object;
                 }
             }
         }
@@ -827,9 +899,9 @@ prototype.deriveQuery = function(props) {
     if (object) {
         return {
             type: 'object',
-            url: props.url,
+            url: absURL,
             promise: Promise.resolve(object),
-            object: object
+            object: object,
         };
     }
 }
@@ -1038,28 +1110,15 @@ prototype.stopExpirationCheck = function() {
 };
 
 /**
- * Mark queries as dirty and trigger onChange event when enough time has passed
+ * Mark queries as expired and trigger onChange event when enough time has passed
  */
 prototype.checkExpiration = function() {
     var interval = Number(this.options.refreshInterval);
     if (!interval) {
         return;
     }
-    var limit = getTime(-interval);
-    var changed = false;
-    var queries = this.queries.filter(function(query) {
-        if (!query.dirty) {
-            if (query.time < limit) {
-                query.dirty = true;
-                changed = true;
-            }
-        }
-        return true;
-    });
-    if (changed) {
-        this.queries = queries;
-        this.triggerEvent(new RelaksDjangoDataSourceEvent('change', this));
-    }
+    var time = getTime(-interval);
+    this.invalidate({ time });
 };
 
 /**
@@ -1214,7 +1273,7 @@ function runHook(query, hookName, input, defaultBehavior) {
             query.object = object;
             query.promise = Promise.resolve(object);
         } else {
-            query.dirty = true;
+            query.expired = true;
         }
         return true;
     } else if (query.type === 'page' || query.type === 'list') {
@@ -1244,7 +1303,7 @@ function runHook(query, hookName, input, defaultBehavior) {
             query.objects = objects;
             query.promise = Promise.resolve(objects);
         } else {
-            query.dirty = true;
+            query.expired = true;
         }
         return true;
     }
@@ -1451,28 +1510,6 @@ function matchObject(object1, object2) {
 }
 
 /**
- * Check if the given URL match any in the list
- *
- * @param  {String} url
- * @param  {Array<String>} otherURLs
- *
- * @return {Boolean}
- */
-function matchAnyURL(url, otherURLs) {
-    return otherURLs.some(function(otherURL) {
-        if (otherURL === url) {
-            return true;
-        } else if (url.substr(0, otherURL.length) === otherURL) {
-            var lc = otherURL.charAt(otherURL.length - 1);
-            var ec = url.charAt(otherURL.length);
-            if (lc === '/' || ec === '/') {
-                return true;
-            }
-        }
-    });
-}
-
-/**
  * Remove trailing slash from URL
  *
  * @param  {String} url
@@ -1524,7 +1561,7 @@ function addTrailingSlash(url) {
  *
  * @param  {String} url
  *
- * @return {String}
+ * @return {String|undefined}
  */
 function getFolderURL(url) {
     var ei = url.lastIndexOf('/');
@@ -1579,12 +1616,48 @@ function waitForNextPage(query) {
     return query.nextPromise || Promise.resolve();
 }
 
-function matchURL(url1, url2) {
-    var qi = url1.lastIndexOf('?');
+function omitQuery(url) {
+    var qi = url.lastIndexOf('?');
     if (qi !== -1) {
-        url1 = url1.substr(0, qi);
+        url = url.substr(0, qi);
     }
-    return (url1 === url2);
+    return url;
+}
+
+/**
+ * Return true if one URL points to a subfolder of another URL
+ *
+ * @param  {String} url
+ * @param  {String} otherURL
+ *
+ * @return {Boolean}
+ */
+function matchURL(url, otherURL) {
+    url = omitQuery(url);
+    if (otherURL === url) {
+        return true;
+    } else if (url.substr(0, otherURL.length) === otherURL) {
+        var lc = otherURL.charAt(otherURL.length - 1);
+        var ec = url.charAt(otherURL.length);
+        if (lc === '/' || ec === '/') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Check if the given URL match any in the list
+ *
+ * @param  {String} url
+ * @param  {Array<String>} otherURLs
+ *
+ * @return {Boolean}
+ */
+function matchAnyURL(url, otherURLs) {
+    return otherURLs.some(function(otherURL) {
+        return matchURL(url, otherURL);
+    });
 }
 
 /**

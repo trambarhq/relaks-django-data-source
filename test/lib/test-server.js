@@ -1,10 +1,10 @@
 import Server from 'karma-server-side';
 
 var serverProxy = {
-    start: function(port) {
-        return Server.run(port, function(port) {
+    start: function(port, options) {
+        return Server.run(port, options || {}, function(port, options) {
             var TestServer = serverRequire('./test/lib/test-server-node');
-            return TestServer.start(port);
+            return TestServer.start(port, options);
         });
     },
     stop: function() {

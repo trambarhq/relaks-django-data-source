@@ -11,9 +11,9 @@ module.exports = {
 var server;
 var serverPort;
 
-function start(port) {
-    // restart options and test data
-    reset();
+function start(port, options) {
+    // reset options and test data
+    reset(options);
 
     // set up handlers
     var app = Express();
