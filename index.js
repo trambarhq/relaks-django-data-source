@@ -385,7 +385,6 @@ prototype.refreshOne = function(query) {
     if (query.refreshing) {
         return;
     }
-    console.log('Refreshing object', query);
     query.refreshing = true;
 
     var _this = this;
@@ -415,7 +414,6 @@ prototype.refreshPage = function(query) {
     if (query.refreshing) {
         return;
     }
-    console.log('Refreshing page', query.url, ', page ', query.page);
     query.refreshing = true;
 
     var _this = this;
@@ -474,7 +472,6 @@ prototype.refreshList = function(query) {
     if (query.refreshing) {
         return;
     }
-    console.log('Refreshing list', query.url);
     query.refreshing = true;
 
     var _this = this;
@@ -1327,9 +1324,13 @@ function runHook(query, hookName, input, defaultBehavior) {
     } else if (query.type === 'page' || query.type === 'list') {
         var impact = true;
         if (query.objects && input.every(Boolean)) {
-            // get rid of null and sort list by ID or URL
+            // sort list by ID or URL
             sortObjects(input);
-            impact = hookFunc(query.objects, input);
+            try {
+                impact = hookFunc(query.objects, input);
+            } catch (err) {
+                console.error(err);
+            }
         }
         if (impact === false) {
             return false;
