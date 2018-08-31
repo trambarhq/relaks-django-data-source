@@ -415,7 +415,7 @@ prototype.refreshPage = function(query) {
     if (query.refreshing) {
         return;
     }
-    console.log('Refreshing page', query.url);
+    console.log('Refreshing page', query.url, ', page ', query.page);
     query.refreshing = true;
 
     var _this = this;
@@ -430,6 +430,25 @@ prototype.refreshPage = function(query) {
             objects = response.results
             total = response.count;
         }
+
+        // remove other pages (unless they're refreshing)
+        var otherQueries = [];
+        _this.queries = _this.queries.filter(function(otherQuery) {
+            if (otherQuery.url === query.url) {
+                if (otherQuery.page !== query.page) {
+                    if (otherQuery.expired && !otherQuery.refreshing) {
+                        otherQueries.push(otherQuery);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        });
+        setTimeout(function() {
+            otherQueries.forEach(function(otherQuery) {
+                _this.fetchPage(otherQuery.url, otherQuery.page, otherQuery.options);
+            });
+        }, 1000);
 
         query.time = time;
         query.refreshing = false;

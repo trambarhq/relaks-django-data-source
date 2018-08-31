@@ -47,7 +47,7 @@ describe('#invalidate()', function() {
                 expect(dataSource.isCached('/tasks', true)).to.be.true;
                 expect(dataSource.isCached('/tasks/1', true)).to.be.true;
                 // derive from list
-                expect(dataSource.isCached('/tasks/2', true)).to.be.true; 
+                expect(dataSource.isCached('/tasks/2', true)).to.be.true;
             });
         });
     })
@@ -75,6 +75,25 @@ describe('#invalidate()', function() {
                 expect(result).to.be.false;
                 expect(dataSource.isCached('/tasks', true)).to.be.true;
                 expect(dataSource.isCached('/tasks/1', true)).to.be.true;
+            });
+        });
+    })
+    it ('should cause page queries to be removed from cache momentarily', function() {
+        var dataSource = new DjangoDataSource({ baseURL });
+        return dataSource.fetchPage('/tasks/', 2).then((page2) => {
+            return dataSource.fetchPage('/tasks/', 3).then((page3) => {
+                var result = dataSource.invalidate();
+
+                return dataSource.fetchPage('/tasks/', 2).then((page2) => {
+                    var object = page3[0];
+                    expect(dataSource.isCached(`/tasks/${object.id}`)).to.be.false;
+
+                    return new Promise((resolve, reject) => {
+                        setTimeout(resolve, 1500);
+                    }).then(() => {
+                        expect(dataSource.isCached(`/tasks/${object.id}`)).to.be.true;
+                    });
+                });
             });
         });
     })
