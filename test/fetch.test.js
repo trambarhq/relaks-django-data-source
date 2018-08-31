@@ -1,6 +1,9 @@
-import { expect } from 'chai';
+import Chai, { expect } from 'chai';
+import ChaiAsPromised from 'chai-as-promised';
 import TestServer from './lib/test-server';
 import DjangoDataSource from '../index';
+
+Chai.use(ChaiAsPromised);
 
 var port = 7777;
 var baseURL = `http://localhost:${port}/api`;
@@ -299,6 +302,17 @@ describe('Fetch methods:', function() {
                     });
                 });
             });
+        })
+        it ('should fail with when one of the objects does not exist', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var urls = [
+                `/tasks/99`,
+                `/tasks/100`,
+                `/tasks/101`,
+            ];
+            return expect(dataSource.fetchMultiple(urls))
+                .to.eventually.be.rejectedWith(Error)
+                .that.contains.keys('results', 'errors');
         })
     })
 

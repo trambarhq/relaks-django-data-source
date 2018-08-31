@@ -144,6 +144,36 @@ describe('Update methods:', function() {
                 });
             });
         })
+        it ('should fail with when one of the objects does not exist', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var objects = [
+                { id: 100, title: 'Dobchinsky' },
+                { id: 101, title: 'Bobchinsky' },
+            ];
+            return expect(dataSource.updateMultiple('/tasks/', objects))
+                .to.eventually.be.rejectedWith(Error)
+                .that.contains.keys('results', 'errors')
+                .that.satisfy((err) => !err.errors[0] && !!err.errors[1])
+                .that.satisfy((err) => !!err.results[0] && !err.results[1]);
+        })
+        it ('should force refresh when an error occurs', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            return dataSource.fetchList('/tasks/').then((objects) => {
+                return new Promise((resolve, reject) => {
+                    dataSource.addEventListener('change', resolve);
+                    setTimeout(reject, 100);
+
+                    var objects = [
+                        { id: 100, title: 'Dobchinsky' },
+                        { id: 101, title: 'Bobchinsky' },
+                    ];
+                    dataSource.updateMultiple('/tasks/', objects);
+                });
+            }).then(() => {
+                expect(dataSource.isCached('/tasks/')).to.be.true;
+                expect(dataSource.isCached('/tasks/', true)).to.be.false;
+            });
+        })
     });
 
     after(function() {

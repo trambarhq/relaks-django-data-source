@@ -352,7 +352,12 @@ prototype.fetchMultiple = function(urls, options) {
     // wait for the complete list to arrive
     var completeListPromise;
     if (cached < urls.length) {
-        completeListPromise = Promise.all(promises);
+        completeListPromise = waitForResults(promises).then(function(outcome) {
+            if (outcome.error) {
+                throw outcome.error;
+            }
+            return outcome.results;
+        });
     }
 
     // see whether partial result set should be immediately returned
@@ -577,18 +582,19 @@ prototype.insertMultiple = function(folderURL, objects) {
         return _this.post(folderAbsURL, object);
     });
     this.stopExpirationCheck();
-    return Promise.all(promises).then(function(insertedObjects) {
+    return waitForResults(promises).then(function(outcome) {
         _this.startExpirationCheck();
 
+        var insertedObjects = outcome.results;
         var changed = false;
         _this.queries.forEach(function(query) {
-            insertedObjects.some(function(insertedObject) {
+            objects.some(function(object) {
                 if (query.type === 'object') {
                     // object queries aren't affected by insert
                     // no point in looking at other objects
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
-                    var objectFolderURL = getObjectFolderURL(folderAbsURL, insertedObject);
+                    var objectFolderURL = folderAbsURL;
                     if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
@@ -607,6 +613,9 @@ prototype.insertMultiple = function(folderURL, objects) {
         });
         if (changed) {
             _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
+        if (outcome.error) {
+            throw outcome.error;
         }
         return insertedObjects;
     });
@@ -652,24 +661,25 @@ prototype.updateMultiple = function(folderURL, objects) {
         return _this.put(absURL, object);
     });
     this.stopExpirationCheck();
-    return Promise.all(promises).then(function(updatedObjects) {
+    return waitForResults(promises).then(function(outcome) {
         _this.startExpirationCheck();
 
+        var updatedObjects = outcome.results;
         var changed = false;
         _this.queries.forEach(function(query) {
-            updatedObjects.some(function(updatedObject) {
+            objects.some(function(object, index) {
                 if (query.type === 'object') {
-                    var objectURL = getObjectURL(folderAbsURL, updatedObject);
+                    var objectURL = getObjectURL(folderAbsURL, object);
                     if (omitQuery(query.url) !== objectURL) {
                         return false;
                     }
                     var defaultBehavior = 'replace';
-                    if (runHook(query, 'afterUpdate', updatedObject, defaultBehavior)) {
+                    if (runHook(query, 'afterUpdate', updatedObjects[index], defaultBehavior)) {
                         changed = true;
                     }
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
-                    var objectFolderURL = getObjectFolderURL(folderAbsURL, updatedObject);
+                    var objectFolderURL = getObjectFolderURL(folderAbsURL, object);
                     if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
@@ -690,6 +700,9 @@ prototype.updateMultiple = function(folderURL, objects) {
         });
         if (changed) {
             _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
+        if (outcome.error) {
+            throw outcome.error;
         }
         return updatedObjects;
     });
@@ -733,6 +746,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
     var promises = objects.map(function(object) {
         var absURL = getObjectURL(folderAbsURL, object);
         return _this.delete(absURL, object).then(function() {
+            // create copy of object, as a DELETE op does not return anything
             var deletedObject = {};
             for (var name in object) {
                 deletedObject[name] = object[name];
@@ -741,20 +755,21 @@ prototype.deleteMultiple = function(folderURL, objects) {
         });
     });
     this.stopExpirationCheck();
-    return Promise.all(promises).then(function(deletedObjects) {
+    return waitForResults(promises).then(function(outcome) {
         _this.startExpirationCheck();
 
+        var deletedObjects = outcome.results;
         var changed = false;
         var queries = _this.queries.filter(function(query) {
             var keep = true;
-            deletedObjects.some(function(deletedObject) {
+            objects.some(function(object, index) {
                 if (query.type === 'object') {
-                    var objectURL = getObjectURL(folderAbsURL, deletedObject);
+                    var objectURL = getObjectURL(folderAbsURL, object);
                     if (omitQuery(query.url) !== objectURL) {
                         return false;
                     }
                     var defaultBehavior = 'remove';
-                    if (runHook(query, 'afterDelete', deletedObject, defaultBehavior)) {
+                    if (runHook(query, 'afterDelete', deletedObjects[index], defaultBehavior)) {
                         if (query.expired) {
                             keep = false;
                         }
@@ -762,7 +777,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
                     }
                     return true;
                 } else if (query.type === 'page' || query.type === 'list') {
-                    var objectFolderURL = getObjectFolderURL(folderAbsURL, deletedObject);
+                    var objectFolderURL = getObjectFolderURL(folderAbsURL, object);
                     if (omitQuery(query.url) !== objectFolderURL) {
                         return false;
                     }
@@ -780,6 +795,9 @@ prototype.deleteMultiple = function(folderURL, objects) {
         if (changed) {
             _this.queries = queries;
             _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+        }
+        if (outcome.error) {
+            throw outcome.error;
         }
         return deletedObjects;
     });
@@ -840,7 +858,9 @@ prototype.isCached = function(url, unexpired) {
     var absURL = this.resolveURL(url);
     var cached = this.queries.some((query) => {
         if (query.url === absURL) {
-            return (!unexpired || !query.expired);
+            if (query.object || query.objects) {
+                return (!unexpired || !query.expired);
+            }
         }
     });
     if (!cached) {
@@ -1265,13 +1285,14 @@ function runHook(query, hookName, input, defaultBehavior) {
         }
     }
     if (query.type === 'object') {
-        var impact;
-        if (query.object) {
-            impact = hookFunc(query.object, input);
-        } else {
-            // need to run query again, in case the data currently in flight
-            // is already stale
-            impact = true;
+        // refresh the query if anything is amiss
+        var impact = true;
+        if (query.object && input) {
+            try {
+                impact = hookFunc(query.object, input);
+            } catch (err) {
+                console.error(err);
+            }
         }
         if (impact === false) {
             return false;
@@ -1285,15 +1306,11 @@ function runHook(query, hookName, input, defaultBehavior) {
         }
         return true;
     } else if (query.type === 'page' || query.type === 'list') {
-        var impact;
-        if (query.objects) {
+        var impact = true;
+        if (query.objects && input.every(Boolean)) {
             // get rid of null and sort list by ID or URL
-            input = input.filter(Boolean);
             sortObjects(input);
             impact = hookFunc(query.objects, input);
-        } else {
-            // see above
-            impact = true;
         }
         if (impact === false) {
             return false;
@@ -1305,8 +1322,10 @@ function runHook(query, hookName, input, defaultBehavior) {
                 var diff = objects.length - query.objects.length;
                 objects.total = query.objects.total + diff;
 
-                // restore more function
-                objects.more = query.objects.more;
+                if (query.type === 'list') {
+                    // restore more function
+                    objects.more = query.objects.more;
+                }
             }
             query.objects = objects;
             query.promise = Promise.resolve(objects);
@@ -1620,6 +1639,40 @@ function attachPageNumber(url, page) {
     return url + sep + 'page=' + page;
 }
 
+function waitForResults(promises) {
+    var results = [];
+    var errors = [];
+    var firstError = null;
+    promises = promises.map(function(promise, index) {
+        if (promise.then instanceof Function) {
+            return promise.then(function(result) {
+                results[index] = result;
+                errors[index] = null;
+            }, function(err) {
+                results[index] = null;
+                errors[index] = err;
+                if (!firstError) {
+                    firstError = err;
+                }
+            });
+        } else {
+            results[index] = promise;
+            errors[index] = null;
+            return null;
+        }
+    });
+    return Promise.all(promises).then(function() {
+        if (firstError) {
+            firstError.results = results;
+            firstError.errors = errors;
+        }
+        return {
+            results: results,
+            error: firstError,
+        };
+    });
+}
+
 function waitForNextPage(query) {
     return query.nextPromise || Promise.resolve();
 }
@@ -1810,9 +1863,7 @@ function joinObjectLists(newList, oldList) {
 function removeObjectsOutsideFolder(objects, folderURL) {
     return objects.filter(function(object) {
         var otherfolderURL = getObjectFolderURL(folderURL, object);
-        if (otherfolderURL === folderURL) {
-            return true;
-        }
+        return (!otherfolderURL || otherfolderURL === folderURL);
     });
 }
 
