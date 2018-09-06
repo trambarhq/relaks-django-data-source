@@ -6,6 +6,7 @@ var defaultOptions = {
 };
 
 function RelaksDjangoDataSource(options) {
+    this.active = false;
     this.listeners = [];
     this.queries = [];
     this.authentications = [];
@@ -23,17 +24,23 @@ function RelaksDjangoDataSource(options) {
 var prototype = RelaksDjangoDataSource.prototype;
 
 /**
- * Initialize the component
+ * Activate the component
  */
-prototype.initialize = function() {
-    this.startExpirationCheck();
+prototype.activate = function() {
+    if (!this.active) {
+        this.startExpirationCheck();
+        this.active = true;
+    }
 };
 
 /**
- * Shutdown the component
+ * Activate the component
  */
-prototype.shutdown = function() {
-    this.stopExpirationCheck();
+prototype.deactivate = function() {
+    if (this.active) {
+        this.stopExpirationCheck();
+        this.active = false;
+    }
 };
 
 /**
@@ -43,7 +50,7 @@ prototype.shutdown = function() {
  * @param  {Function} handler
  */
 prototype.addEventListener = function(type, handler) {
-    this.listeners.push({  type: type,  handler: handler });
+    this.listeners.push({ type: type,  handler: handler });
 };
 
 /**
