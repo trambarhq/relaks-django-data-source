@@ -1169,7 +1169,7 @@ prototype.checkExpiration = function() {
         return;
     }
     var time = getTime(-interval);
-    this.invalidate({ time });
+    this.invalidate({ time: time });
 };
 
 /**
