@@ -97,6 +97,15 @@ prototype.resolveURL = function(url) {
     }
     var baseURL = this.options.baseURL;
     if (baseURL && !/^https?:/.test(url)) {
+        if (!/^https?:/.test(baseURL)) {
+            if (typeof(location) === 'object') {
+                baseURL = location.protocol + '//' + location.host + baseURL;
+            } else {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.warn('Base URL is not absolute');
+                }
+            }
+        }
         url = removeTrailingSlash(baseURL) + addLeadingSlash(url);
     }
     url = addTrailingSlash(url);
