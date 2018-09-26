@@ -1906,11 +1906,11 @@ function removeObjectsOutsideFolder(objects, folderURL) {
  * @return {Number}
  */
 function getMinimum(options, total, def) {
-    let minimum = (options) ? options.minimum : undefined;
+    var minimum = (options) ? options.minimum : undefined;
     if (typeof(minimum) === 'string') {
         minimum = minimum.trim();
         if (minimum.charAt(minimum.length - 1) === '%') {
-            let percent = parseInt(minimum);
+            var percent = parseInt(minimum);
             minimum = Math.ceil(total * (percent / 100));
         }
     }
