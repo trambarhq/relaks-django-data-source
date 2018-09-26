@@ -835,7 +835,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
  */
 prototype.invalidate = function(props) {
     var changed = false;
-    this.queries.forEach((query) => {
+    this.queries.forEach(function(query) {
         if (query.expired) {
             return;
         }
@@ -879,7 +879,7 @@ prototype.invalidate = function(props) {
  */
 prototype.isCached = function(url, unexpired) {
     var absURL = this.resolveURL(url);
-    var cached = this.queries.some((query) => {
+    var cached = this.queries.some(function(query) {
         if (query.url === absURL) {
             if (query.object || query.objects) {
                 return (!unexpired || !query.expired);
