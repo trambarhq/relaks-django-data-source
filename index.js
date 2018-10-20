@@ -1087,6 +1087,13 @@ prototype.authorize = function(loginURL, token, allowURLs) {
     });
 };
 
+/**
+ * Return an authorization token for the given URL
+ *
+ * @param  {String} url
+ *
+ * @return {String|undefined}
+ */
 prototype.getAuthorizationToken = function(url) {
     var token;
     this.authorizations.some(function(authorization) {
@@ -1100,6 +1107,12 @@ prototype.getAuthorizationToken = function(url) {
     return token;
 };
 
+/**
+ * Cancel authentication, causing outstanding operations that require it to
+ * fail (i.e. their promises will be rejected).
+ *
+ * @param  {Array<String>|undefined} allowURLs
+ */
 prototype.cancelAuthentication = function(allowURLs) {
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
     this.authentications = this.authentications.filter(function(authentication) {
@@ -1112,6 +1125,11 @@ prototype.cancelAuthentication = function(allowURLs) {
     });
 };
 
+/**
+ * Remove authorization for certain URLs or all URLs.
+ *
+ * @param  {Array<String>|undefined} denyURLs
+ */
 prototype.cancelAuthorization = function(denyURLs) {
     var denyAbsURLs = this.resolveURLs(denyURLs || [ '/' ]);
     this.authorizations = this.authorizations.filter(function(authorization) {
@@ -1128,6 +1146,13 @@ prototype.cancelAuthorization = function(denyURLs) {
     });
 };
 
+/**
+ * Log out from the remote server
+ *
+ * @param  {String} logoutURL
+ *
+ * @return {Promise}
+ */
 prototype.revokeAuthorization = function(logoutURL) {
     var logoutAbsURL = this.resolveURLs(logoutURL);
     return fetch(logoutAbsURL, options).then(function(response) {
@@ -1182,7 +1207,7 @@ prototype.checkExpiration = function() {
 };
 
 /**
- * Fetch JSON object at URL
+ * Perform an HTTP GET operation
  *
  * @param  {String} url
  *
@@ -1196,6 +1221,14 @@ prototype.get = function(url) {
     return this.request(url, options);
 };
 
+/**
+ * Perform an HTTP POST operation
+ *
+ * @param  {String} url
+ * @param  {Object} object
+ *
+ * @return {Promise<Object>}
+ */
 prototype.post = function(url, object) {
     var options = {
         method: 'POST',
@@ -1209,6 +1242,14 @@ prototype.post = function(url, object) {
     return this.request(url, options);
 };
 
+/**
+ * Perform an HTTP PUT operation
+ *
+ * @param  {String} url
+ * @param  {Object} object
+ *
+ * @return {Promise<Object>}
+ */
 prototype.put = function(url, object) {
     var options = {
         method: 'PUT',
@@ -1222,7 +1263,14 @@ prototype.put = function(url, object) {
     return this.request(url, options);
 };
 
-prototype.delete = function(url, object) {
+/**
+ * Perform an HTTP DELETE operation
+ *
+ * @param  {String} url
+ *
+ * @return {Promise<null>}
+ */
+prototype.delete = function(url) {
     var options = {
         method: 'DELETE',
         mode: 'cors',
@@ -1232,6 +1280,14 @@ prototype.delete = function(url, object) {
     return this.request(url, options);
 };
 
+/**
+ * Perform an HTTP request
+ *
+ * @param  {String} url
+ * @param  {Object} options
+ *
+ * @return {Promise}
+ */
 prototype.request = function(url, options) {
     var _this = this;
     var token = this.getAuthorizationToken(url);
@@ -1480,11 +1536,11 @@ function pushObjects(objects, newObjects) {
  * Return true to indicate that query should be removed
  *
  * @param  {Object} object
- * @param  {Object} deletedOBject
+ * @param  {Object} deletedObject
  *
  * @return {true}
  */
-function removeObject(object, deletedOBject) {
+function removeObject(object, deletedObject) {
     return true;
 }
 
