@@ -65,41 +65,28 @@ You can also flag queries as abbreviated selectively.
 
 ### addEventListener
 
-```javascript
-/**
- * @param  {String} type
- * @param  {Function} handler
- * @param  {Boolean|undefined} beginning
- */
-addEventListener(type, handler, beginning)
+```typescript
+function addEventListener(name: string, handler: function, beginning?:boolean): void
 ```
+
 Add an event listener to the route manager. `handler` will be called whenever events of `type` occur. When `beginning` is true, the listener will be place before any existing listeners. Otherwise it's added at the end of the list.
 
 Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-event-emitter).
 
 ### removeEventListener
 
-```javascript
-/**
- * @param  {String} type
- * @param  {Function} handler
- */
-removeEventListener(type, handler)
+```typescript
+function removeEventListener(name: string, handler: function): void
 ```
+
 Remove an event listener from the route manager. `handler` and `type` must match what was given to [addEventListener](#addeventlistener)().
 
 Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-event-emitter).
 
 ### fetchOne
 
-```javascript
-/**
- * @param  {String} url
- * @param  {Object|undefined} options
- *
- * @return {Promise<Object>}
- */
-fetchOne(url, options)
+```typescript
+async function fetchOne(url: string, options?: object): object
 ```
 
 Fetch an object from the server. Operations are cached. If the URL matches that of a previous call, this method will return the same promise as before (which may or may not be fulfilled already). It will also check the results of calls to [fetchPage()](#fetchpage) and [fetchList()](#fetchlist) to see if the object in question hasn't been already retrieved.
