@@ -1,3 +1,6 @@
+var EventEmitter = require('relaks-event-emitter');
+var GenericEvent = EventEmitter.GenericEvent;
+
 var defaultOptions = {
     baseURL: '',
     refreshInterval: 0,
@@ -21,7 +24,7 @@ function RelaksDjangoDataSource(options) {
     }
 }
 
-var prototype = RelaksDjangoDataSource.prototype;
+var prototype = RelaksDjangoDataSource.prototype = Object.create(EventEmitter.prototype)
 
 /**
  * Activate the component
@@ -41,47 +44,6 @@ prototype.deactivate = function() {
         this.stopExpirationCheck();
         this.active = false;
     }
-};
-
-/**
- * Attach an event handler
- *
- * @param  {String} type
- * @param  {Function} handler
- */
-prototype.addEventListener = function(type, handler) {
-    this.listeners.push({ type: type,  handler: handler });
-};
-
-/**
- * Remove an event handler
- *
- * @param  {String} type
- * @param  {Function} handler
- */
-prototype.removeEventListener = function(type, handler) {
-    this.listeners = this.listeners.filter(function(listener) {
-        return !(listener.type === type && listener.handler === handler);
-    })
-};
-
-/**
- * Send event to event listeners, return true or false depending on whether
- * there were any listeners
- *
- * @param  {RelaksDjangoDataSourceEvent} evt
- *
- * @return {Boolean}
- */
-prototype.triggerEvent = function(evt) {
-    var fired = false;
-    this.listeners.forEach(function(listener) {
-        if (listener.type === evt.type && listener.handler) {
-            fired = true;
-            listener.handler(evt);
-        }
-    });
-    return fired;
 };
 
 /**
@@ -2004,30 +1966,10 @@ function getTime(delta) {
 }
 
 function RelaksDjangoDataSourceEvent(type, target, props) {
-    this.type = type;
-    this.target = target;
-    for (var name in props) {
-        this[name] = props[name];
-    }
-    this.defaultPrevented = false;
-    this.decisionPromise = null;
+    GenericEvent.call(this, type, target, props);
 }
 
-var prototype = RelaksDjangoDataSourceEvent.prototype;
-
-prototype.preventDefault = function() {
-    this.defaultPrevented = true;
-};
-
-prototype.postponeDefault = function(promise) {
-    if (!promise || !(promise.then instanceof Function)) {
-        this.decisionPromise = promise;
-    }
-};
-
-prototype.waitForDecision = function() {
-    return this.decisionPromise || Promise.resolve();
-};
+RelaksDjangoDataSourceEvent.prototype = Object.create(GenericEvent.prototype)
 
 function RelaksDjangoDataSourceError(status, message) {
     this.status = status;
