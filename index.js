@@ -9,8 +9,8 @@ var defaultOptions = {
 };
 
 function RelaksDjangoDataSource(options) {
+    EventEmitter.call(this);
     this.active = false;
-    this.listeners = [];
     this.queries = [];
     this.authentications = [];
     this.authorizations = [];
