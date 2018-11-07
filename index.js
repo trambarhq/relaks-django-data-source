@@ -961,9 +961,10 @@ prototype.requestAuthentication = function(absURL) {
         var authenticationEvent = new RelaksDjangoDataSourceEvent('authentication', this, {
             url: absURL
         });
-        var eventHandled = this.triggerEvent(authenticationEvent);
+        this.triggerEvent(authenticationEvent);
         promise = authenticationEvent.waitForDecision().then(function() {
-            if (eventHandled && !authenticationEvent.defaultPrevented) {
+            var waitForAuthentication = !authenticationEvent.defaultPrevented;
+            if (waitForAuthentication) {
                 // wait for authenticate() to get called
                 // if authorize() was called, the promise would be resolved already
                 return authentication.promise;
@@ -995,7 +996,7 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
         if (!token) {
             throw new RelaksDjangoDataSourceError(403, 'No authorization token');
         }
-        return _this.authorize(loginURL, token, allowURLs);
+        return _this.authorize(loginURL, token, allowURLs, true);
     });
 };
 
@@ -1005,16 +1006,18 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
  * @param  {String} loginURL
  * @param  {String} token
  * @param  {Array<String>} allowURLs
+ * @param  {Boolean} fresh
  *
  * @return {Promise<Boolean>}
  */
-prototype.authorize = function(loginURL, token, allowURLs) {
+prototype.authorize = function(loginURL, token, allowURLs, fresh) {
     var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
     var authorizationEvent = new RelaksDjangoDataSourceEvent('authorization', this, {
         url: loginAbsURL,
         token: token,
+        fresh: !!fresh,
     });
     this.triggerEvent(authorizationEvent);
     return authorizationEvent.waitForDecision().then(function() {
