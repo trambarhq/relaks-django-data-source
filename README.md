@@ -270,7 +270,7 @@ async function authenticate(loginURL: string, credentials: object, allowURLs?: s
 ### authorize
 
 ```typescript
-async function authorize(loginURL: string, token: string, allowURLs?: string[]): boolean
+async function authorize(loginURL: string, token: string, allowURLs?: string[], fresh?: boolean): boolean
 ```
 
 ### cancelAuthentication
@@ -327,30 +327,145 @@ Low-level function that performs an HTTP DELETE operation.
 
 ### afterInsert
 
+A query's `afterInsert` hook is invoked after new objects have been inserted into a directory using `insertOne()` or `insertMultiple()` so that cached results can be updated. Only queries performed through `fetchPage()` or `fetchList()` have this hook.
+
+The hook function has the following form:
+
+```typescript
+function afterInserHook(objects: object[], newObjects: object[]): objects[]
+```
+
+`objects` are the existing cached objects, while `newObjects` is a list of newly created objects. The function should return a new array, with the new objects added. If there's no change (because none of the new objects actually matches the query), the function should return `false`. If the function return `true`, the query will be invalidated.
+
+A string can be used to specify a predefined hook function. The possible values are ["refresh"](#refresh), ["ignore"](#ignore), ["unshift"](#unshift), ["push"](#push).
+
 ### afterUpdate
+
+A query's `afterUpdate` hook is invoked after existing objects have been modified using `updateOne()` or `updateMultiple()` so that cached results can be updated.
+
+For queries performed through `fetchOne()`, the hook function has the following form:
+
+```typescript
+function afterUpdateHook(object: object, newObject: object): object
+```
+
+`object` is the cached object before, while `newObject` is the object returned by the server after the save operation. If the function returns an object, then that becomes the cached object. If it returns `false`, that means no change occurred. If it returns `true`, the query is invalidated.
+
+For queries performed through `fetchPage()` or `fetchList`, the hook function has the following form:
+
+```typescript
+function afterUpdateHook(objects: object[], newObjects: object[]): object[]
+```
+
+`objects` are the existing cached objects, while `newObjects` is a list of modified objects. The function should return a new array with the modified objects incorporated. Care must be taken to ensure correct sort order. If there's no change, the function should return `false`. If the function return `true`, the query will be invalidated.
+
+A string can be used to specify a predefined hook function. The possible values are ["refresh"](#refresh), "ignore", "replace".
 
 ### afterDelete
 
-## Predefined hook handlers
+A query's `afterDelete` hook is invoked after objects have been deleted using `deleteOne()` or `deleteMultiple()` so that cached results can be updated.
 
-### refresh
+For queries performed through `fetchOne()`, the hook function has the following form:
 
-### ignore
+```typescript
+function afterDeleteHook(object: object, deletedObject: object): object
+```
 
-### replace
+`object` is the cached object before, while `deletedObject` is just a copy of the same object. If the function returns an object, that'll be the result when the query is run again. If it returns `true`, then the query is removed from the cache.
 
-### unshift
+For queries performed through `fetchPage()` or `fetchList`, the hook function has the following form:
 
-### push
+```typescript
+function afterUpdateHook(objects: objects[], newObjects: objects[]): objects[]
+```
 
-### remove
+`objects` are the existing cached objects, while `newObjects` is a list of deleted objects. The function should return a new array with the deleted objects removed. If there's no change, it should return `false`. If it returns `true`, the query will be refreshed.
+
+A string can be used to specify a predefined hook function. The possible values are "refresh", "ignore", "remove".
+
+## Predefined hook functions
+
+* "refresh" - returns true to request refreshing of the query
+* "ignore" - returns false to indicate there's no need to change the cached results
+* "replace" - replaces currently cached objects with the updated copy from the server
+* "unshift" - places new objects at the beginning of the list
+* "push" - places new objects at the end of the list
+* "remove" - remove deleted objects from the list
 
 ## Events
 
 ### change
 
-### authentication
+A `change` event is emitted whenever rerunning queries might yield new result sets.
+
+#### Properties
+
+* `type` - 'change'
+* `target` - the data source
+* `defaultPrevented` - whether `preventDefault()` was called
+* `propagationStopped` - whether `stopImmediatePropagation()` was called
+
+#### Methods
 
 ### authorization
 
+* `postponeDefault(promise: Promise)` - postpones the route change util `promise` is fulfilled
+* `stopImmediatePropagation()` - stops other listeners from receiving the event
+
+### authentication
+
+An `authentication` is emitted when the server responds to a request with the HTTP status 401 ("Unauthorized").
+
+#### Default behavior
+
+Wait for authentication to occur then try again.
+
+#### Properties
+
+* `type` - 'authentication'
+* `target` - the data source
+* `defaultPrevented` - whether `preventDefault()` was called
+* `propagationStopped` - whether `stopImmediatePropagation()` was called
+* `url` - the URL that triggered the 401 response
+
+#### Methods
+
+* `preventDefault()` - fail the operation that trigger the authentication request
+* `postponeDefault(promise: Promise)` - wait for given promise to be fulfilled and fail the operation is the fulfillment value is false
+* `stopImmediatePropagation()` - stops other listeners from receiving the event
+
+### authorization
+
+The `authorization` event is emitted when the data source receives an authorization token, either from the server after a call to `authenticate()` or from your app via `authorize()`.
+
+#### Default behavior
+
+Allow operations waiting for authentication to proceed.
+
+#### Properties
+
+* `type` - 'authorization'
+* `target` - the data source
+* `defaultPrevented` - whether `preventDefault()` was called
+* `propagationStopped` - whether `stopImmediatePropagation()` was
+* `url` - the login URL used
+* `token` - the authorization token
+* `fresh` - whether the token was freshly issued by the server
+
+#### Methods
+
+* `preventDefault()` - pending operations from proceeding despite authorization having been granted
+* `postponeDefault(promise: Promise)` - postpones the decision on whether to proceed until the given promise is fulfilled
+* `stopImmediatePropagation()` - stops other listeners from receiving the event
+
+Generally, there's no reason to prevent the default behavior from happen. Do so might only make sense if the app fails to gain some other authorization.
+
 ## Examples
+
+* [Starwars API: Episode V](https://github.com/chung-leong/relaks-starwars-example-sequel) - sequel to the first Starwars API example
+* [Starwars API: Episode VI - The Server Strikes Back](https://github.com/chung-leong/relaks-starwars-example-isomorphic) - demonstrates how to create an isomorphic app
+* [Django todo list](https://github.com/chung-leong/relaks-django-todo-example) - demonstrates authentication and data saving using [relaks-django-data-source](https://github.com/chung-leong/relaks-django-data-source)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](#LICENSE) file for details
