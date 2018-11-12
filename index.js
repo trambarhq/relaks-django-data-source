@@ -738,18 +738,20 @@ prototype.runInsertHooks = function(op) {
         }
     });
 
-    var time = getTime();
-    op.results.forEach(function(newObject) {
-        var absURL = getObjectURL(op.url, newObject);
-        var query = {
-            type: 'object',
-            url: absURL,
-            promise: Promise.resolve(newObject),
-            object: newObject,
-            time: time,
-        };
-        _this.queries.unshift(query);
-    });
+    if (op.results) {
+        var time = getTime();
+        op.results.forEach(function(newObject) {
+            var absURL = getObjectURL(op.url, newObject);
+            var query = {
+                type: 'object',
+                url: absURL,
+                promise: Promise.resolve(newObject),
+                object: newObject,
+                time: time,
+            };
+            _this.queries.unshift(query);
+        });
+    }
     return changed;
 };
 
@@ -763,17 +765,18 @@ prototype.runInsertHooks = function(op) {
  */
 prototype.runInsertHook = function(query, op) {
     if (query.type === 'page' || query.type === 'list') {
+        var defaultBehavior = 'refresh';
         var queryFolderURL = omitQuery(query.url);
         if (queryFolderURL === op.url) {
-            if (op.rejects.length > 0) {
+            if (op.rejects) {
                 query.expired = true;
                 return true;
             }
-
-            var newObjects = excludeObjects(op.results, query.objects);
-            if (newObjects) {
-                var defaultBehavior = 'refresh';
-                return runHook(query, 'afterInsert', newObjects, defaultBehavior);
+            if (op.results) {
+                var newObjects = excludeObjects(op.results, query.objects);
+                if (newObjects) {
+                    return runHook(query, 'afterInsert', newObjects, defaultBehavior);
+                }
             }
         }
     }
@@ -810,33 +813,39 @@ prototype.runUpdateHooks = function(op) {
  */
 prototype.runUpdateHook = function(query, op) {
     if (query.type === 'object') {
+        var defaultBehavior = 'replace';
         var queryFolderURL = getFolderURL(query.url);
         if (queryFolderURL === op.url) {
-            var rejectedObject = findObject(op.rejects, query.object);
-            if (rejectedObject) {
-                query.expired = true;
-                return true;
+            if (op.rejects) {
+                var rejectedObject = findObject(op.rejects, query.object);
+                if (rejectedObject) {
+                    query.expired = true;
+                    return true;
+                }
             }
-
-            var modifiedObject = findObject(op.results, query.object);
-            if (modifiedObject) {
-                var defaultBehavior = 'replace';
-                return runHook(query, 'afterUpdate', modifiedObject, defaultBehavior);
+            if (op.results) {
+                var modifiedObject = findObject(op.results, query.object);
+                if (modifiedObject) {
+                    return runHook(query, 'afterUpdate', modifiedObject, defaultBehavior);
+                }
             }
         }
     } else if (query.type === 'page' || query.type === 'list') {
+        var defaultBehavior = 'refresh';
         var queryFolderURL = omitQuery(query.url);
         if (queryFolderURL === op.url) {
-            var rejectedObjects = findObjects(op.rejects, query.objects);
-            if (rejectedObjects) {
-                query.expired = true;
-                return true;
+            if (op.rejects) {
+                var rejectedObjects = findObjects(op.rejects, query.objects);
+                if (rejectedObjects) {
+                    query.expired = true;
+                    return true;
+                }
             }
-
-            var modifiedObjects = findObjects(op.results, query.objects);
-            if (modifiedObjects) {
-                var defaultBehavior = 'refresh';
-                return runHook(query, 'afterUpdate', modifiedObjects, defaultBehavior);
+            if (op.results) {
+                var modifiedObjects = findObjects(op.results, query.objects);
+                if (modifiedObjects) {
+                    return runHook(query, 'afterUpdate', modifiedObjects, defaultBehavior);
+                }
             }
         }
     }
@@ -877,33 +886,39 @@ prototype.runDeleteHooks = function(op) {
  */
 prototype.runDeleteHook = function(query, op) {
     if (query.type === 'object') {
+        var defaultBehavior = 'remove';
         var queryFolderURL = getFolderURL(query.url);
         if (queryFolderURL === op.url) {
-            var rejectedObject = findObject(op.rejects, query.object);
-            if (rejectedObject) {
-                query.expired = true;
-                return true;
+            if (op.rejects) {
+                var rejectedObject = findObject(op.rejects, query.object);
+                if (rejectedObject) {
+                    query.expired = true;
+                    return true;
+                }
             }
-
-            var deletedObject = findObject(op.results, query.object);
-            if (deletedObject) {
-                var defaultBehavior = 'remove';
-                return runHook(query, 'afterDelete', deletedObject, defaultBehavior);
+            if (op.results) {
+                var deletedObject = findObject(op.results, query.object);
+                if (deletedObject) {
+                    return runHook(query, 'afterDelete', deletedObject, defaultBehavior);
+                }
             }
         }
     } else if (query.type === 'page' || query.type === 'list') {
+        var defaultBehavior = (query.type === 'list') ? 'remove' : 'refresh';
         var queryFolderURL = omitQuery(query.url);
         if (queryFolderURL === op.url) {
-            var rejectedObjects = findObjects(op.rejects, query.objects);
-            if (rejectedObjects) {
-                query.expired = true;
-                return true;
+            if (op.rejects) {
+                var rejectedObjects = findObjects(op.rejects, query.objects);
+                if (rejectedObjects) {
+                    query.expired = true;
+                    return true;
+                }
             }
-
-            var deletedObjects = findObjects(op.results, query.objects);
-            if (deletedObjects) {
-                var defaultBehavior = (query.type === 'list') ? 'remove' : 'refresh';
-                return runHook(query, 'afterDelete', deletedObjects, defaultBehavior);
+            if (op.results) {
+                var deletedObjects = findObjects(op.results, query.objects);
+                if (deletedObjects) {
+                    return runHook(query, 'afterDelete', deletedObjects, defaultBehavior);
+                }
             }
         }
     }
@@ -1998,8 +2013,10 @@ function matchAnyURL(url, otherURLs) {
  * @return {Number}
  */
 function findObjectIndex(list, object) {
+    var keyA = object.id || object.url;
     for (var i = 0; i < list.length; i++) {
-        if (compareObjectKeys(object, list[i])) {
+        var keyB = list[i].id || list[i].url;
+        if (keyA === keyB) {
             return i;
         }
     }
@@ -2052,15 +2069,6 @@ function excludeObjects(list, objects) {
     if (list.length > 0) {
         return list;
     }
-}
-
-function compareObjectKeys(a, b) {
-    if (a && b) {
-        var keyA = a.id || a.url;
-        var keyB = b.id || b.url;
-        return (keyA === keyB);
-    }
-    return false;
 }
 
 /**
@@ -2191,37 +2199,43 @@ function joinObjectLists(newList, oldList) {
  * @return {Object<Array>}
  */
 function segregateResults(folderURL, objects, outcome) {
-    var groupHash = {};
-    var groups = [];
+    var opHash = {};
+    var ops = [];
     for (var i = 0; i < objects.length; i++) {
         var object = objects[i];
         var result = outcome.results[i];
         var error = outcome.errors[i];
         var objectFolderURL = getObjectFolderURL(folderURL, object);
-        var group = groupHash[objectFolderURL];
-        if (!group) {
-            group = groupHash[objectFolderURL] = {
+        var op = opHash[objectFolderURL];
+        if (!op) {
+            op = opHash[objectFolderURL] = {
                 url: objectFolderURL,
-                results: [],
-                rejects: []
+                results: null,
+                rejects: null
             };
-            groups.push(group);
+            ops.push(op);
         };
         if (result) {
-            group.results.push(result);
+            if (!op.results) {
+                op.results = [];
+            }
+            op.results.push(result);
         } else {
             if (error) {
                 switch (error.status) {
                     case 404:
                     case 410:
                     case 409:
-                        group.rejects.push(object);
+                        if (!op.rejects) {
+                            op.rejects = [];
+                        }
+                        op.rejects.push(object);
                         break;
                 }
             }
         }
     }
-    return groups;
+    return ops;
 }
 
 /**
