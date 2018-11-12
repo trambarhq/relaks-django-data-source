@@ -95,7 +95,7 @@ prototype.resolveURLs = function(urls) {
  *
  * @return {Boolean}
  */
-prototype.reportChanges = function(changed) {
+prototype.notifyChanges = function(changed) {
     if (changed === false) {
         return false;
     }
@@ -287,7 +287,7 @@ prototype.fetchNextPage = function(query, initial) {
             }
 
             // inform parent component that more data is available
-            _this.reportChanges(!initial);
+            _this.notifyChanges(!initial);
             return objects;
         }
     }).catch(function(err) {
@@ -363,7 +363,7 @@ prototype.fetchMultiple = function(urls, options) {
         if (completeListPromise) {
             // return partial list then fire change event when complete list arrives
             completeListPromise.then(function(objects) {
-                _this.reportChanges();
+                _this.notifyChanges();
             });
         }
         return Promise.resolve(cachedResults);
@@ -392,7 +392,7 @@ prototype.refreshOne = function(query) {
         if (!matchObject(object, query.object)) {
             query.object = object;
             query.promise = Promise.resolve(object);
-            _this.reportChanges();
+            _this.notifyChanges();
         }
     }).catch(function(err) {
         query.refreshing = false;
@@ -450,7 +450,7 @@ prototype.refreshPage = function(query) {
             objects.total = total;
             query.objects = objects;
             query.promise = Promise.resolve(objects);
-            _this.reportChanges();
+            _this.notifyChanges();
         }
     }).catch(function(err) {
         query.refreshing = false;
@@ -510,7 +510,7 @@ prototype.refreshList = function(query) {
                         objects.more = fetchMoreAfterward;
                         query.objects = objects;
                         query.promise = Promise.resolve(objects);
-                        _this.reportChanges();
+                        _this.notifyChanges();
                     }
 
                     // keep going until all pages have been updated
@@ -555,7 +555,7 @@ prototype.refreshList = function(query) {
                 objects.total = objects.length;
                 query.objects = objects;
                 query.promise = Promise.resolve(objects);
-                _this.reportChanges();
+                _this.notifyChanges();
             }
         }).catch(function(err) {
             query.refreshing = false;
@@ -594,13 +594,13 @@ prototype.insertMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((g) => {
-            if (_this.runInsertHooks(g.url, g.results, g.rejects)) {
+        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+            if (_this.runInsertHooks(op)) {
                 changed = true;
             }
         });
         if (changed) {
-            _this.reportChanges();
+            _this.notifyChanges();
         }
         if (outcome.error) {
             throw outcome.error;
@@ -650,12 +650,12 @@ prototype.updateMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((g) => {
-            if (_this.runUpdateHooks(g.url, g.results, g.rejects)) {
+        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+            if (_this.runUpdateHooks(op)) {
                 changed = true;
             }
         });
-        _this.reportChanges(changed);
+        _this.notifyChanges(changed);
         if (outcome.error) {
             throw outcome.error;
         }
@@ -707,12 +707,12 @@ prototype.deleteMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((g) => {
-            if (_this.runDeleteHooks(g.url, g.results, g.rejects)) {
+        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+            if (_this.runDeleteHooks(op)) {
                 changed = true;
             }
         });
-        _this.reportChanges(changed);
+        _this.notifyChanges(changed);
         if (outcome.error) {
             throw outcome.error;
         }
@@ -723,27 +723,24 @@ prototype.deleteMultiple = function(folderURL, objects) {
 /**
  * Run insert hooks
  *
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} newObjects
- * @param  {Array<Object>} rejectedObjects
- * @param  {Object|undefined} excludeQuery
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runInsertHooks = function(folderAbsURL, newObjects, rejectedObjects, excludeQuery) {
+prototype.runInsertHooks = function(op) {
     var _this = this;
     var changed = false;
     this.queries.forEach(function(query) {
-        if (query !== excludeQuery) {
-            if (_this.runInsertHook(query, folderAbsURL, newObjects, rejectedObjects)) {
+        if (query !== op.query) {
+            if (_this.runInsertHook(query, op)) {
                 changed = true;
             }
         }
     });
 
     var time = getTime();
-    newObjects.forEach(function(newObject) {
-        var absURL = getObjectURL(folderAbsURL, newObject);
+    op.results.forEach(function(newObject) {
+        var absURL = getObjectURL(op.url, newObject);
         var query = {
             type: 'object',
             url: absURL,
@@ -760,25 +757,23 @@ prototype.runInsertHooks = function(folderAbsURL, newObjects, rejectedObjects, e
  * Run a query's insert hook if its URL matches
  *
  * @param  {Object} query
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} newObjects
- * @param  {Array<Object>} rejectedObjects
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runInsertHook = function(query, folderAbsURL, newObjects, rejectedObjects) {
+prototype.runInsertHook = function(query, op) {
     if (query.type === 'page' || query.type === 'list') {
         var queryFolderURL = omitQuery(query.url);
-        if (queryFolderURL === folderAbsURL) {
-            if (rejectedObjects.length > 0) {
+        if (queryFolderURL === op.url) {
+            if (op.rejects.length > 0) {
                 query.expired = true;
                 return true;
             }
 
-            var newObjectsNotInQuery = excludeObjects(newObjects, query.objects);
-            if (newObjectsNotInQuery) {
+            var newObjects = excludeObjects(op.results, query.objects);
+            if (newObjects) {
                 var defaultBehavior = 'refresh';
-                return runHook(query, 'afterInsert', newObjectsNotInQuery, defaultBehavior);
+                return runHook(query, 'afterInsert', newObjects, defaultBehavior);
             }
         }
     }
@@ -788,19 +783,16 @@ prototype.runInsertHook = function(query, folderAbsURL, newObjects, rejectedObje
 /**
  * Run afterUpdate hooks
  *
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} modifiedObjects
- * @param  {Array<Object>} rejectedObjects
- * @param  {Object|undefined} excludeQuery
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runUpdateHooks = function(folderAbsURL, modifiedObjects, rejectedObjects, excludeQuery) {
+prototype.runUpdateHooks = function(op) {
     var _this = this;
     var changed = false;
     this.queries.forEach(function(query) {
-        if (query !== excludeQuery) {
-            if (_this.runUpdateHook(query, folderAbsURL, modifiedObjects, rejectedObjects)) {
+        if (query !== op.query) {
+            if (_this.runUpdateHook(query, op)) {
                 changed = true;
             }
         }
@@ -812,41 +804,39 @@ prototype.runUpdateHooks = function(folderAbsURL, modifiedObjects, rejectedObjec
  * Run a query's afterUpdate hook if its URL matches
  *
  * @param  {Object} query
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} modifiedObjects
- * @param  {Array<Object>} rejectedObjects
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runUpdateHook = function(query, folderAbsURL, modifiedObjects, rejectedObjects) {
+prototype.runUpdateHook = function(query, op) {
     if (query.type === 'object') {
         var queryFolderURL = getFolderURL(query.url);
-        if (queryFolderURL === folderAbsURL) {
-            var rejectedObjectInQuery = findObject(rejectedObjects, query.object);
-            if (rejectedObjectInQuery) {
+        if (queryFolderURL === op.url) {
+            var rejectedObject = findObject(op.rejects, query.object);
+            if (rejectedObject) {
                 query.expired = true;
                 return true;
             }
 
-            var modifiedObjectInQuery = findObject(modifiedObjects, query.object);
-            if (modifiedObjectInQuery) {
+            var modifiedObject = findObject(op.results, query.object);
+            if (modifiedObject) {
                 var defaultBehavior = 'replace';
-                return runHook(query, 'afterUpdate', modifiedObjectInQuery, defaultBehavior);
+                return runHook(query, 'afterUpdate', modifiedObject, defaultBehavior);
             }
         }
     } else if (query.type === 'page' || query.type === 'list') {
         var queryFolderURL = omitQuery(query.url);
-        if (queryFolderURL === folderAbsURL) {
-            var rejectedObjectsInQuery = findObjects(rejectedObjects, query.objects);
-            if (rejectedObjectsInQuery) {
+        if (queryFolderURL === op.url) {
+            var rejectedObjects = findObjects(op.rejects, query.objects);
+            if (rejectedObjects) {
                 query.expired = true;
                 return true;
             }
 
-            var modifiedObjectsInQuery = findObjects(modifiedObjects, query.objects);
-            if (modifiedObjectsInQuery) {
+            var modifiedObjects = findObjects(op.results, query.objects);
+            if (modifiedObjects) {
                 var defaultBehavior = 'refresh';
-                return runHook(query, 'afterUpdate', modifiedObjectsInQuery, defaultBehavior);
+                return runHook(query, 'afterUpdate', modifiedObjects, defaultBehavior);
             }
         }
     }
@@ -856,19 +846,16 @@ prototype.runUpdateHook = function(query, folderAbsURL, modifiedObjects, rejecte
 /**
  * Run afterDelete hooks
  *
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} deletedObjects
- * @param  {Array<Object>} rejectedObjects
- * @param  {Object|undefined} excludeQuery
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runDeleteHooks = function(folderAbsURL, deletedObjects, rejectedObjects, excludeQuery) {
+prototype.runDeleteHooks = function(op) {
     var _this = this;
     var changed = false;
     this.queries = this.queries.filter(function(query) {
-        if (query !== excludeQuery) {
-            if (_this.runDeleteHook(query, folderAbsURL, deletedObjects, rejectedObjects)) {
+        if (query !== op.query) {
+            if (_this.runDeleteHook(query, op)) {
                 changed = true;
                 if (query.expired && query.type === 'object') {
                     return false;
@@ -884,41 +871,39 @@ prototype.runDeleteHooks = function(folderAbsURL, deletedObjects, rejectedObject
  * Run a query's afterDelete hook if its URL matches
  *
  * @param  {Object} query
- * @param  {String} folderAbsURL
- * @param  {Array<Object>} deletedObjects
- * @param  {Array<Object>} rejectedObjects
+ * @param  {Object} op
  *
  * @return {Boolean}
  */
-prototype.runDeleteHook = function(query, folderAbsURL, deletedObjects, rejectedObjects) {
+prototype.runDeleteHook = function(query, op) {
     if (query.type === 'object') {
         var queryFolderURL = getFolderURL(query.url);
-        if (queryFolderURL === folderAbsURL) {
-            var rejectedObjectInQuery = findObject(rejectedObjects, query.object);
-            if (rejectedObjectInQuery) {
+        if (queryFolderURL === op.url) {
+            var rejectedObject = findObject(op.rejects, query.object);
+            if (rejectedObject) {
                 query.expired = true;
                 return true;
             }
 
-            var deletedObjectInQuery = findObject(deletedObjects, query.object);
-            if (deletedObjectInQuery) {
+            var deletedObject = findObject(op.results, query.object);
+            if (deletedObject) {
                 var defaultBehavior = 'remove';
-                return runHook(query, 'afterDelete', deletedObjectInQuery, defaultBehavior);
+                return runHook(query, 'afterDelete', deletedObject, defaultBehavior);
             }
         }
     } else if (query.type === 'page' || query.type === 'list') {
         var queryFolderURL = omitQuery(query.url);
-        if (queryFolderURL === folderAbsURL) {
-            var rejectedObjectsInQuery = findObjects(rejectedObjects, query.objects);
-            if (rejectedObjectsInQuery) {
+        if (queryFolderURL === op.url) {
+            var rejectedObjects = findObjects(op.rejects, query.objects);
+            if (rejectedObjects) {
                 query.expired = true;
                 return true;
             }
 
-            var deletedObjectsInQuery = findObjects(deletedObjects, query.objects);
-            if (deletedObjectsInQuery) {
+            var deletedObjects = findObjects(op.results, query.objects);
+            if (deletedObjects) {
                 var defaultBehavior = (query.type === 'list') ? 'remove' : 'refresh';
-                return runHook(query, 'afterDelete', deletedObjectsInQuery, defaultBehavior);
+                return runHook(query, 'afterDelete', deletedObjects, defaultBehavior);
             }
         }
     }
@@ -946,7 +931,7 @@ prototype.invalidate = function(time) {
             changed = true;
         }
     });
-    return this.reportChanges(changed);
+    return this.notifyChanges(changed);
 };
 
 /**
@@ -973,7 +958,7 @@ prototype.invalidateOne = function(url, options) {
         query.expired = true;
         changed = true;
     }
-    return this.reportChanges(changed);
+    return this.notifyChanges(changed);
 };
 
 /**
@@ -997,7 +982,7 @@ prototype.invalidateList = function(url, options) {
         query.expired = true;
         changed = true;
     }
-    return this.reportChanges(changed);
+    return this.notifyChanges(changed);
 };
 
 /**
@@ -1023,7 +1008,7 @@ prototype.invalidatePage = function(url, page, options) {
         query.expired = true;
         changed = true;
     }
-    return this.reportChanges(changed);
+    return this.notifyChanges(changed);
 };
 
 /**
@@ -1056,7 +1041,7 @@ prototype.invalidateMultiple = function(urls, options) {
             changed = true;
         }
     });
-    return this.reportChanges(changed);
+    return this.notifyChanges(changed);
 };
 
 /**
