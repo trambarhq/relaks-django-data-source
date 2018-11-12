@@ -159,15 +159,16 @@ describe('Delete methods:', function() {
         it ('should force refresh when an error occurs', function() {
             var dataSource = new DjangoDataSource({ baseURL });
             return dataSource.fetchList('/tasks/').then((objects) => {
+                var missing = objects[3]
+                var present = objects[4];
+                // remove object in backend
+                TestServer.remove(missing.id);
                 return new Promise((resolve, reject) => {
                     dataSource.addEventListener('change', resolve);
                     setTimeout(reject, 100);
 
-                    var objects = [
-                        { id: 100 },
-                        { id: 101 },
-                    ];
-                    dataSource.deleteMultiple('/tasks/', objects);
+                    var slice = [ missing, present ];
+                    dataSource.deleteMultiple('/tasks/', slice);
                 });
             }).then(() => {
                 expect(dataSource.isCached('/tasks/')).to.be.true;

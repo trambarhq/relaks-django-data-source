@@ -6,6 +6,10 @@ module.exports = {
     start,
     stop,
     reset,
+    find,
+    insert,
+    update,
+    remove,
 };
 
 var server;
@@ -78,6 +82,44 @@ function reset(options) {
     }
 }
 
+function find(id) {
+    var object = testData.find((object) => {
+        return (object.id === id);
+    });
+    if (!object) {
+        raise(404);
+    }
+    return object;
+}
+
+function insert(props) {
+    if (props.hasOwnProperty('id')) {
+        raise(404);
+    }
+    var object = Object.assign({ id: nextID++ }, props);
+    testData.push(object);
+    return object;
+}
+
+function update(id, props) {
+    if (props.hasOwnProperty('id') && id !== props.id) {
+        raise(400);
+    }
+    var object = find(id);
+    Object.assign(object, props);
+    return object;
+}
+
+function remove(id) {
+    var newList = testData.filter((object) => {
+        return (object.id !== id);
+    });
+    if (newList.length === testData.length) {
+        raise(404);
+    }
+    testData = newList;
+}
+
 var defaultOptions = {
     pagination: false,
     perPage: 10,
@@ -124,78 +166,77 @@ function getObjectURL(object) {
 }
 
 function handleListFetch(req, res) {
-    var objects;
-    if (currentOptions.pagination) {
-        var page = parseInt(req.query.page) || 1;
-        var perPage = currentOptions.perPage;
-        var start = (page - 1) * currentOptions.perPage;
-        var end = start + currentOptions.perPage;
-        var objects = testData.slice(start, end)
-        var count = testData.length;
-        var next = (end < count) ? getPageURL(page + 1) : null;
-        var prev = (page > 1) ? getPageURL(page - 1) : null;
-        var results = objects.map(transformObject);
-        res.json({ count, next, prev, results });
-    } else {
-        var results = testData.map(transformObject);
-        res.json(results);
+    var page = parseInt(req.query.page) || 1;
+    try {
+        if (currentOptions.pagination) {
+            var perPage = currentOptions.perPage;
+            var start = (page - 1) * currentOptions.perPage;
+            var end = start + currentOptions.perPage;
+            var objects = testData.slice(start, end)
+            var count = testData.length;
+            var next = (end < count) ? getPageURL(page + 1) : null;
+            var prev = (page > 1) ? getPageURL(page - 1) : null;
+            var results = objects.map(transformObject);
+            res.json({ count, next, prev, results });
+        } else {
+            var results = testData.map(transformObject);
+            res.json(results);
+        }
+    } catch (err) {
+        res.sendStatus(err.status || 500);
     }
 }
 
 function handleObjectFetch(req, res) {
     var id = parseInt(req.params.id);
-    var object = testData.find((object) => {
-        return (object.id === id);
-    });
-    if (!object) {
-        res.sendStatus(404);
-        return;
+    try {
+        var object = find(id);
+        var result = transformObject(object);
+        res.json(result);
+    } catch (err) {
+        res.sendStatus(err.status || 500);
     }
-    var result = transformObject(object);
-    res.json(result);
 }
 
 function handleObjectInsert(req, res) {
-    var object = { id: nextID++ };
     var props = req.body;
-    if (props.id !== object.id && props.hasOwnProperty('id')) {
-        res.sendStatus(400);
-        return;
+    try {
+        var object = insert(props);
+        var result = transformObject(object);
+        res.json(result);
+    } catch (err) {
+        res.sendStatus(err.status || 500);
     }
-    Object.assign(object, props);
-    testData.push(object);
-    var result = transformObject(object);
-    res.json(result);
 }
 
 function handleObjectUpdate(req, res) {
-    var props = req.body;
     var id = parseInt(req.params.id);
-    var object = testData.find((object) => {
-        return (object.id === id);
-    });
-    if (!object) {
-        res.sendStatus(404);
-        return;
+    var props = req.body;
+    try {
+        var object = update(id, props);
+        var result = transformObject(object);
+        res.json(result);
+    } catch (err) {
+        res.sendStatus(err.status || 500);
     }
-    Object.assign(object, props);
-    var result = transformObject(object);
-    res.json(result);
 }
 
 function handleObjectDelete(req, res) {
     var id = parseInt(req.params.id);
-    var newList = testData.filter((object) => {
-        return (object.id !== id);
-    });
-    if (newList.length === testData.length) {
-        res.sendStatus(404);
-        return;
+    try {
+        remove(id);
+        res.sendStatus(204);
+    } catch (err) {
+        res.sendStatus(err.status || 500);
     }
-    testData = newList;
-    res.sendStatus(204);
 }
 
 function handleTestRequest(req, res) {
     res.json({ status: 'ok' });
+}
+
+function raise(status) {
+    var err = new Error;
+    err.status = status;
+    throw err;
 }

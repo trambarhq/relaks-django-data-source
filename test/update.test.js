@@ -158,16 +158,18 @@ describe('Update methods:', function() {
         })
         it ('should force refresh when an error occurs', function() {
             var dataSource = new DjangoDataSource({ baseURL });
-            return dataSource.fetchList('/tasks/').then((objects) => {
+            var options = { afterUpdate: 'replace' };
+            return dataSource.fetchList('/tasks/', options).then((objects) => {
+                var missing = objects[3]
+                var present = objects[4];
+                // remove object in backend
+                TestServer.remove(missing.id);
                 return new Promise((resolve, reject) => {
                     dataSource.addEventListener('change', resolve);
                     setTimeout(reject, 100);
 
-                    var objects = [
-                        { id: 100, title: 'Dobchinsky' },
-                        { id: 101, title: 'Bobchinsky' },
-                    ];
-                    dataSource.updateMultiple('/tasks/', objects);
+                    var slice = [ missing, present ];
+                    dataSource.updateMultiple('/tasks/', slice);
                 });
             }).then(() => {
                 expect(dataSource.isCached('/tasks/')).to.be.true;
