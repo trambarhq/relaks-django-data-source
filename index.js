@@ -89,6 +89,21 @@ prototype.resolveURLs = function(urls) {
 };
 
 /**
+ * Trigger a 'change' event unless changed is false
+ *
+ * @param  {Boolean} changed
+ *
+ * @return {Boolean}
+ */
+prototype.reportChanges = function(changed) {
+    if (changed === false) {
+        return false;
+    }
+    this.triggerEvent(new RelaksDjangoDataSourceEvent('change', this));
+    return true;
+};
+
+/**
  * Fetch one object at the URL.
  *
  * @param  {String} url
@@ -106,7 +121,7 @@ prototype.fetchOne = function(url, options) {
     };
     var query = this.findQuery(props);
     if (!query) {
-        query = this.deriveQuery(absURL);
+        query = this.deriveQuery(absURL, true);
     }
     if (!query) {
         var time = getTime();
@@ -272,9 +287,7 @@ prototype.fetchNextPage = function(query, initial) {
             }
 
             // inform parent component that more data is available
-            if (!initial) {
-                _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
-            }
+            _this.reportChanges(!initial);
             return objects;
         }
     }).catch(function(err) {
@@ -312,10 +325,14 @@ prototype.fetchMultiple = function(urls, options) {
     var cachedResults = [];
     var promises = urls.map(function(url) {
         var absURL = _this.resolveURL(url);
-        var props = { url: absURL, type: 'object' };
+        var props = {
+            url: absURL,
+            type: 'object',
+            options: fetchOptions
+        };
         var query = _this.findQuery(props);
         if (!query) {
-            query = _this.deriveQuery(absURL);
+            query = _this.deriveQuery(absURL, true);
         }
         if (query && query.object) {
             cached++;
@@ -346,7 +363,7 @@ prototype.fetchMultiple = function(urls, options) {
         if (completeListPromise) {
             // return partial list then fire change event when complete list arrives
             completeListPromise.then(function(objects) {
-                _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+                _this.reportChanges();
             });
         }
         return Promise.resolve(cachedResults);
@@ -375,7 +392,7 @@ prototype.refreshOne = function(query) {
         if (!matchObject(object, query.object)) {
             query.object = object;
             query.promise = Promise.resolve(object);
-            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+            _this.reportChanges();
         }
     }).catch(function(err) {
         query.refreshing = false;
@@ -433,7 +450,7 @@ prototype.refreshPage = function(query) {
             objects.total = total;
             query.objects = objects;
             query.promise = Promise.resolve(objects);
-            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+            _this.reportChanges();
         }
     }).catch(function(err) {
         query.refreshing = false;
@@ -493,7 +510,7 @@ prototype.refreshList = function(query) {
                         objects.more = fetchMoreAfterward;
                         query.objects = objects;
                         query.promise = Promise.resolve(objects);
-                        _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+                        _this.reportChanges();
                     }
 
                     // keep going until all pages have been updated
@@ -538,7 +555,7 @@ prototype.refreshList = function(query) {
                 objects.total = objects.length;
                 query.objects = objects;
                 query.promise = Promise.resolve(objects);
-                _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+                _this.reportChanges();
             }
         }).catch(function(err) {
             query.refreshing = false;
@@ -583,7 +600,7 @@ prototype.insertMultiple = function(folderURL, objects) {
             }
         });
         if (changed) {
-            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
+            _this.reportChanges();
         }
         if (outcome.error) {
             throw outcome.error;
@@ -638,9 +655,7 @@ prototype.updateMultiple = function(folderURL, objects) {
                 changed = true;
             }
         });
-        if (changed) {
-            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
-        }
+        _this.reportChanges(changed);
         if (outcome.error) {
             throw outcome.error;
         }
@@ -697,9 +712,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
                 changed = true;
             }
         });
-        if (changed) {
-            _this.triggerEvent(new RelaksDjangoDataSourceEvent('change', _this));
-        }
+        _this.reportChanges(changed);
         if (outcome.error) {
             throw outcome.error;
         }
@@ -933,12 +946,117 @@ prototype.invalidate = function(time) {
             changed = true;
         }
     });
-    if (changed) {
-        this.triggerEvent(new RelaksDjangoDataSourceEvent('change', this));
-        return true;
-    } else {
-        return false;
+    return this.reportChanges(changed);
+};
+
+/**
+ * Invalidate an object query
+ *
+ * @param  {String} url
+ * @param  {Object|undefined} options
+ *
+ * @return {Boolean}
+ */
+prototype.invalidateOne = function(url, options) {
+    var changed = false;
+    var absURL = this.resolveURL(url);
+    var props = {
+        type: 'object',
+        url: absURL,
+        options: options || {},
+    };
+    var query = this.findQuery(props);
+    if (!query) {
+        query = this.deriveQuery(absURL, true);
     }
+    if (query && !query.expired) {
+        query.expired = true;
+        changed = true;
+    }
+    return this.reportChanges(changed);
+};
+
+/**
+ * Invalidate a list query
+ *
+ * @param  {String} url
+ * @param  {Object|undefined} options
+ *
+ * @return {Boolean}
+ */
+prototype.invalidateList = function(url, options) {
+    var changed = false;
+    var absURL = this.resolveURL(url);
+    var props = {
+        type: 'list',
+        url: absURL,
+        options: options || {},
+    };
+    var query = this.findQuery(props);
+    if (query && !query.expired) {
+        query.expired = true;
+        changed = true;
+    }
+    return this.reportChanges(changed);
+};
+
+/**
+ * Invalidate a page query
+ *
+ * @param  {String} url
+ * @param  {Number} page
+ * @param  {Object|undefined} options
+ *
+ * @return {Boolean}
+ */
+prototype.invalidatePage = function(url, page, options) {
+    var changed = false;
+    var absURL = this.resolveURL(url);
+    var props = {
+        type: 'page',
+        url: absURL,
+        page: page,
+        options: options || {},
+    };
+    var query = this.findQuery(props);
+    if (query && !query.expired) {
+        query.expired = true;
+        changed = true;
+    }
+    return this.reportChanges(changed);
+};
+
+/**
+ * Invalidate multiple object queries
+ *
+ * @param  {Array<String>} urls
+ * @param  {Object|undefined} options
+ *
+ * @return {Boolean}
+ */
+prototype.invalidateMultiple = function(urls, options) {
+    var _this = this;
+    var changed = false;
+    var fetchOptions = {};
+    for (var name in options) {
+        if (name !== 'minimum') {
+            fetchOptions[name] = options[name];
+        }
+    }
+    urls.forEach(function(url) {
+        var absURL = _this.resolveURL(url);
+        var props = {
+            type: 'object',
+            url: absURL,
+            options: fetchOptions,
+        };
+        var query = _this.findQuery(props);
+        if (query && !query.expired) {
+            query.expired = true;
+            changed = true;
+        }
+    });
+    return this.reportChanges(changed);
 };
 
 /**
@@ -988,10 +1106,11 @@ prototype.findQuery = function(props) {
  * Derive a query for an item from an existing directory query
  *
  * @param  {String} absURL
+ * @param  {Boolean|undefined} add
  *
  * @return {Object|undefined}
  */
-prototype.deriveQuery = function(absURL) {
+prototype.deriveQuery = function(absURL, add) {
     var _this = this;
     var object;
     var time;
@@ -1022,13 +1141,15 @@ prototype.deriveQuery = function(absURL) {
         }
     });
     if (object) {
-        return {
+        var query = {
             type: 'object',
             url: absURL,
             promise: Promise.resolve(object),
             object: object,
             time: time,
         };
+        this.queries.unshift(query);
+        return query;
     }
 }
 
