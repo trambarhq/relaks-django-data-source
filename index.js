@@ -915,34 +915,20 @@ prototype.runDeleteHook = function(query, folderAbsURL, deletedObjects, rejected
 /**
  * Mark matching queries as expired
  *
- * @param  {Object} props
+ * @param  {String|Date} time
  *
  * @return {Boolean}
  */
-prototype.invalidate = function(props) {
+prototype.invalidate = function(time) {
+    if (time instanceof Date) {
+        time = time.toISOString();
+    }
     var changed = false;
     this.queries.forEach(function(query) {
         if (query.expired) {
             return;
         }
-        var match = true;
-        for (var name in props) {
-            var value = props[name];
-            if (name === 'url') {
-                if (!matchURL(query.url, value)) {
-                    match = false;
-                    break;
-                }
-            } else if (name === 'time') {
-                if (value instanceof Date) {
-                    value = value.toISOString();
-                }
-                if (query.time > value) {
-                    match = false;
-                }
-            }
-        }
-        if (match) {
+        if (!time || query.time <= time) {
             query.expired = true;
             changed = true;
         }
@@ -1324,7 +1310,7 @@ prototype.checkExpiration = function() {
         return;
     }
     var time = getTime(-interval);
-    this.invalidate({ time: time });
+    this.invalidate(time);
 };
 
 /**
