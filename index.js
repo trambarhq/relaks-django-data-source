@@ -130,7 +130,7 @@ prototype.fetchOne = function(url, options) {
             var object = response;
             query.object = object;
             query.time = time;
-            _this.removeExcessQueries();
+            _this.processFreshObject(object, absURL, query, true);
             return object;
         });
         this.queries.unshift(query);
@@ -178,7 +178,7 @@ prototype.fetchPage = function(url, page, options) {
             objects.total = total;
             query.objects = objects;
             query.time = time;
-            _this.removeExcessQueries();
+            _this.processFreshObjects(objects, pageURL, query, true);
             return objects;
         });
         this.queries.push(query);
@@ -256,11 +256,13 @@ prototype.fetchNextPage = function(query, initial) {
             query.objects = objects;
             query.time = time;
             query.nextPromise = null;
+            _this.processFreshObjects(objects, nextURL, query, true);
             return objects;
         } else if (response instanceof Object) {
             // append retrieved objects to list
             var total = response.count;
-            var objects = appendObjects(query.objects, response.results);
+            var freshObjects = response.results;
+            var objects = appendObjects(query.objects, freshObjects);
             query.objects = objects;
             query.promise = nextPromise;
             query.nextPromise = null;
@@ -269,6 +271,7 @@ prototype.fetchNextPage = function(query, initial) {
             if (initial) {
                 query.time = time;
             }
+            _this.processFreshObjects(freshObjects, nextURL, query, initial);
 
             // attach function to results so caller can ask for more results
             if (query.nextURL) {
@@ -392,6 +395,7 @@ prototype.refreshOne = function(query) {
         if (!matchObject(object, query.object)) {
             query.object = object;
             query.promise = Promise.resolve(object);
+            _this.processFreshObject(object, query.url, query, false);
             _this.notifyChanges();
         }
     }).catch(function(err) {
@@ -446,10 +450,12 @@ prototype.refreshPage = function(query) {
         query.time = time;
         query.refreshing = false;
         query.expired = false;
-        if (!replaceIdentificalObjects(objects, query.objects)) {
+        var freshObjects = replaceIdentificalObjects(objects, query.objects);
+        if (freshObjects) {
             objects.total = total;
             query.objects = objects;
             query.promise = Promise.resolve(objects);
+            _this.processFreshObjects(freshObjects, pageURL, query, false);
             _this.notifyChanges();
         }
     }).catch(function(err) {
@@ -505,11 +511,13 @@ prototype.refreshList = function(query) {
 
                     var total = response.count;
                     var objects = joinObjectLists(refreshedObjects, oldObjects);
-                    if (!replaceIdentificalObjects(objects, query.objects)) {
+                    var freshObjects = replaceIdentificalObjects(objects, query.objects);
+                    if (freshObjects) {
                         objects.total = total;
                         objects.more = fetchMoreAfterward;
                         query.objects = objects;
                         query.promise = Promise.resolve(objects);
+                        _this.processFreshObjects(freshObjects, query.url, query, false);
                         _this.notifyChanges();
                     }
 
@@ -550,11 +558,13 @@ prototype.refreshList = function(query) {
             query.time = time;
             query.refreshing = false;
             query.expired = false;
-            if (!replaceIdentificalObjects(objects, query.objects)) {
+            var freshObjects = replaceIdentificalObjects(objects, query.objects);
+            if (freshObjects) {
                 objects.more = _this.fetchNoMore.bind(this, query);
                 objects.total = objects.length;
                 query.objects = objects;
                 query.promise = Promise.resolve(objects);
+                _this.processFreshObjects(freshObjects, query.url, query, false);
                 _this.notifyChanges();
             }
         }).catch(function(err) {
@@ -562,6 +572,34 @@ prototype.refreshList = function(query) {
             throw err;
         });
     }
+};
+
+prototype.processFreshObject = function(object, objectURL, excludeQuery, notify) {
+    var op = {
+        url: getFolderURL(objectURL),
+        results: [ object ],
+        rejects: [],
+        query: excludeQuery,
+    };
+    var changed = this.runUpdateHooks(op);
+    if (notify)  {
+        this.notifyChanges(changed);
+    }
+    return changed;
+};
+
+prototype.processFreshObjects = function(objects, folderURL, excludeQuery, notify) {
+    var op = {
+        url: omitSearchString(folderURL),
+        results: objects,
+        rejects: [],
+        query: excludeQuery,
+    };
+    var changed = this.runUpdateHooks(op);
+    if (notify)  {
+        this.notifyChanges(changed);
+    }
+    return changed;
 };
 
 /**
@@ -766,7 +804,7 @@ prototype.runInsertHooks = function(op) {
 prototype.runInsertHook = function(query, op) {
     if (query.type === 'page' || query.type === 'list') {
         var defaultBehavior = 'refresh';
-        var queryFolderURL = omitQuery(query.url);
+        var queryFolderURL = omitSearchString(query.url);
         if (queryFolderURL === op.url) {
             if (op.rejects) {
                 query.expired = true;
@@ -824,7 +862,7 @@ prototype.runUpdateHook = function(query, op) {
                 }
             }
             if (op.results) {
-                var modifiedObject = findObject(op.results, query.object);
+                var modifiedObject = findObject(op.results, query.object, true);
                 if (modifiedObject) {
                     return runHook(query, 'afterUpdate', modifiedObject, defaultBehavior);
                 }
@@ -832,7 +870,7 @@ prototype.runUpdateHook = function(query, op) {
         }
     } else if (query.type === 'page' || query.type === 'list') {
         var defaultBehavior = 'refresh';
-        var queryFolderURL = omitQuery(query.url);
+        var queryFolderURL = omitSearchString(query.url);
         if (queryFolderURL === op.url) {
             if (op.rejects) {
                 var rejectedObjects = findObjects(op.rejects, query.objects);
@@ -842,7 +880,7 @@ prototype.runUpdateHook = function(query, op) {
                 }
             }
             if (op.results) {
-                var modifiedObjects = findObjects(op.results, query.objects);
+                var modifiedObjects = findObjects(op.results, query.objects, true);
                 if (modifiedObjects) {
                     return runHook(query, 'afterUpdate', modifiedObjects, defaultBehavior);
                 }
@@ -905,7 +943,7 @@ prototype.runDeleteHook = function(query, op) {
         }
     } else if (query.type === 'page' || query.type === 'list') {
         var defaultBehavior = (query.type === 'list') ? 'remove' : 'refresh';
-        var queryFolderURL = omitQuery(query.url);
+        var queryFolderURL = omitSearchString(query.url);
         if (queryFolderURL === op.url) {
             if (op.rejects) {
                 var rejectedObjects = findObjects(op.rejects, query.objects);
@@ -1128,7 +1166,7 @@ prototype.deriveQuery = function(absURL, add) {
                 abbreviated = true;
             }
             if (!abbreviated) {
-                if (omitQuery(query.url) ===  folderAbsURL) {
+                if (omitSearchString(query.url) ===  folderAbsURL) {
                     return query.objects.some(function(item) {
                         if (item.url === absURL || item.id === objectID) {
                             object = item;
@@ -1147,13 +1185,13 @@ prototype.deriveQuery = function(absURL, add) {
             promise: Promise.resolve(object),
             object: object,
             time: time,
+            options: {}
         };
-        this.queries.unshift(query);
+        if (add) {
+            this.queries.unshift(query);
+        }
         return query;
     }
-}
-
-prototype.removeExcessQueries = function() {
 }
 
 /**
@@ -1936,7 +1974,7 @@ function getObjectFolderURL(folderURL, object) {
         return;
     }
     if (folderURL) {
-        return omitQuery(folderURL);
+        return omitSearchString(folderURL);
     } else if (object.url) {
         return getFolderURL(object.url);
     }
@@ -1959,7 +1997,7 @@ function attachPageNumber(url, page) {
     return url + sep + 'page=' + page;
 }
 
-function omitQuery(url) {
+function omitSearchString(url) {
     var qi = url.lastIndexOf('?');
     if (qi !== -1) {
         url = url.substr(0, qi);
@@ -1976,7 +2014,7 @@ function omitQuery(url) {
  * @return {Boolean}
  */
 function matchURL(url, otherURL) {
-    url = omitQuery(url);
+    url = omitSearchString(url);
     if (otherURL === url) {
         return true;
     } else if (url.substr(0, otherURL.length) === otherURL) {
@@ -2028,25 +2066,46 @@ function findObjectIndex(list, object) {
  *
  * @param  {Array<Object>} list
  * @param  {Object} object
+ * @param  {Boolean|undefined} different
  *
  * @return {Object|undefined}
  */
-function findObject(list, object) {
+function findObject(list, object, different) {
     if (object) {
         var index = findObjectIndex(list, object);
         if (index !== -1) {
-            return list[index];
+            var objectFound = list[index];
+            if (different) {
+                // allow object to have fewer properties than those in
+                // the list
+                for (var name in object) {
+                    if (!matchObject(object[name], objectFound[name])) {
+                        return objectFound;
+                    }
+                }
+            } else {
+                return objectFound;
+            }
         }
     }
 }
 
-function findObjects(list, objects) {
+/**
+ * Find objects in a list
+ *
+ * @param  {Array<Object>} list
+ * @param  {Array<Object>} objects
+ * @param  {Boolean|undefined} different
+ *
+ * @return {Array<Object>|undefined}
+ */
+function findObjects(list, objects, different) {
     if (objects) {
         var found = [];
         for (var i = 0; i < objects.length; i++) {
-            var index = findObjectIndex(list, objects[i]);
-            if (index !== -1) {
-                found.push(list[index]);
+            var objectFound = findObject(list, objects[i], different);
+            if (objectFound) {
+                found.push(objectFound);
             }
         }
         if (found.length > 0) {
@@ -2137,27 +2196,37 @@ function appendObjects(list, objects) {
 
 /**
  * Replace objects in newList that are identical to their counterpart in oldList.
- * Return true if newList is identical to oldList.
+ * Return objects that are not found in the old list or undefined if there are
+ * no change
  *
  * @param  {Array<Object>} newList
  * @param  {Array<Object>} oldList
  *
- * @return {Boolean}
+ * @return {Array<Object>|undefined}
  */
 function replaceIdentificalObjects(newList, oldList) {
-    var unchanged = 0;
+    var freshObjects = [];
+    var changed = false;
     for (var i = 0; i < newList.length; i++) {
         var oldIndex = findObjectIndex(oldList, newList[i]);
         if (oldIndex !== -1) {
             if (matchObject(newList[i], oldList[oldIndex])) {
                 newList[i] = oldList[oldIndex];
-                if (i === oldIndex) {
-                    unchanged++;
+                if (i !== oldIndex) {
+                    changed = true;
                 }
+            } else {
+                freshObjects.push(newList[i]);
+                changed = true;
             }
+        } else {
+            freshObjects.push(newList[i]);
+            changed = true;
         }
     }
-    return (unchanged === newList.length && newList.length === oldList.length);
+    if (changed) {
+        return freshObjects;
+    }
 }
 
 /**

@@ -38,6 +38,52 @@ describe('Fetch methods:', function() {
                 expect(err).to.have.property('status', 404);
             });
         })
+        it ('should invalidate a query by fetchList() when a fresher copy is retrieved', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { minimum: '100%' };
+            return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                var object1 = objects[0];
+                return TestServer.update(object1.id, { category: 'something' }).then(() => {
+                    // invalidate fetchOne() query (which gets created automatically)
+                    expect(dataSource.invalidateOne(`/tasks/${object1.id}`)).to.be.true;
+                    return new Promise((resolve, reject) => {
+                        // trigger refresh and wait for change event
+                        dataSource.addEventListener('change', resolve);
+                        dataSource.fetchOne(`/tasks/${object1.id}`);
+                    });
+                }).then(() => {
+                    return dataSource.fetchOne(`/tasks/${object1.id}`).then((object) => {
+                        expect(object).to.have.property('category', 'something');
+                        expect(dataSource.isCached('/tasks/', true)).to.be.false;
+                    });
+                });
+            });
+        });
+        it ('should replace object in a query by fetchList() when a fresher copy is retrieved', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var options = { minimum: '100%', afterUpdate: 'replace' };
+            return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                var object2 = objects[1];
+                return TestServer.update(object2.id, { category: 'bingo' }).then(() => {
+                    // invalidate fetchOne() query (which gets created automatically)
+                    expect(dataSource.invalidateOne(`/tasks/${object2.id}`)).to.be.true;
+                    return new Promise((resolve, reject) => {
+                        // trigger refresh and wait for change event
+                        dataSource.addEventListener('change', resolve);
+                        dataSource.fetchOne(`/tasks/${object2.id}`);
+                    });
+                }).then(() => {
+                    return dataSource.fetchOne(`/tasks/${object2.id}`).then((object) => {
+                        expect(object).to.have.property('category', 'bingo');
+                        expect(dataSource.isCached('/tasks/', true)).to.be.true;
+                        return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                            var object2 = objects[1];
+                            expect(object2).to.have.property('category', 'bingo');
+                        });
+                    });
+                });
+            });
+        });
     })
     describe('#fetchList', function() {
         describe('(no pagination)', function() {
@@ -97,6 +143,19 @@ describe('Fetch methods:', function() {
                     expect(err).to.have.property('status', 404);
                 });
             })
+            it ('should invalidate another query by when fresher objects are retrieved', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: '100%' };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    var object1 = objects[0];
+                    return TestServer.update(object1.id, { category: 'something' }).then(() => {
+                        return dataSource.fetchList(`/tasks/?sort=1`, options).then((objects) => {
+                            expect(dataSource.isCached('/tasks/', true)).to.be.false;
+                            expect(dataSource.isCached('/tasks/?sort=1', true)).to.be.true;
+                        });
+                    });
+                });
+            });
         })
         describe('(pagination)', function() {
             before(function() {
@@ -163,6 +222,19 @@ describe('Fetch methods:', function() {
                     expect(objects).to.have.length(90);
                 });
             })
+            it ('should invalidate another query by when fresher objects are retrieved', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                var options = { minimum: '100%' };
+                return dataSource.fetchList(`/tasks/`, options).then((objects) => {
+                    var object1 = objects[0];
+                    return TestServer.update(object1.id, { category: 'something' }).then(() => {
+                        return dataSource.fetchList(`/tasks/?sort=1`, options).then((objects) => {
+                            expect(dataSource.isCached('/tasks/', true)).to.be.false;
+                            expect(dataSource.isCached('/tasks/?sort=1', true)).to.be.true;
+                        });
+                    });
+                });
+            });
         })
         describe('(URL keys)', function() {
             before(function() {
