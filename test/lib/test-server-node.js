@@ -29,6 +29,7 @@ function start(port, options) {
         .post(handleTestRequest)
         .put(handleTestRequest)
         .delete(handleTestRequest);
+    app.use('/api/', checkAuthentication);
     app.route('/api/tasks/')
         .get(handleListFetch)
         .post(handleObjectInsert);
@@ -36,6 +37,10 @@ function start(port, options) {
         .get(handleObjectFetch)
         .put(handleObjectUpdate)
         .delete(handleObjectDelete);
+    app.route('/login')
+        .post(handleLogIn);
+    app.route('/logout')
+        .post(handleLogOut);
 
     // start up server
     return new Promise((resolve, reject) => {
@@ -122,12 +127,14 @@ function remove(id) {
 
 var defaultOptions = {
     pagination: false,
+    authentication: false,
     perPage: 10,
     urlKeys: false,
 };
 var currentOptions;
 var nextID;
 var testData;
+var authToken;
 
 function createTestObject() {
     var id = nextID++;
@@ -163,6 +170,28 @@ function getPageURL(page) {
 
 function getObjectURL(object) {
     return `http://localhost:${serverPort}/api/tasks/${object.id}/`;
+}
+
+function getAuthorizationToken(req) {
+    var m = /Token (\w+)/.exec(req.headers.authorization);
+    if (m) {
+        return m[1];
+    }
+}
+
+function checkAuthentication(req, res, done) {
+    if (currentOptions.authentication) {
+        var token = getAuthorizationToken(req);
+        if (!token) {
+            res.sendStatus(401);
+        } else if (token !== authToken) {
+            res.sendStatus(403);
+        } else {
+            done();
+        }
+    } else {
+        done();
+    }
 }
 
 function handleListFetch(req, res) {
@@ -225,6 +254,35 @@ function handleObjectDelete(req, res) {
     var id = parseInt(req.params.id);
     try {
         remove(id);
+        res.sendStatus(204);
+    } catch (err) {
+        res.sendStatus(err.status || 500);
+    }
+}
+
+function handleLogIn(req, res) {
+    var credentials = req.body;
+    try {
+        if (!credentials.username || !credentials.password) {
+            raise(400);
+        }
+        if (credentials.password === 'incorrect') {
+            raise(401);
+        }
+        authToken = Math.random().toString(16).substr(2);
+        res.json({ key: authToken });
+    } catch (err) {
+        res.sendStatus(err.status || 500);
+    }
+}
+
+function handleLogOut(req, res) {
+    try {
+        var token = getAuthorizationToken(req);
+        if (token !== authToken) {
+            raise(403);
+        }
+        authToken = null;
         res.sendStatus(204);
     } catch (err) {
         res.sendStatus(err.status || 500);

@@ -1203,6 +1203,7 @@ prototype.deriveQuery = function(absURL, add) {
  * @return {Promise<Boolean>}
  */
 prototype.requestAuthentication = function(absURL) {
+    var _this = this;
     var promise;
     this.authentications.some(function(authentication) {
         if (authentication.url === absURL) {
@@ -1233,8 +1234,8 @@ prototype.requestAuthentication = function(absURL) {
                 return authentication.promise;
             } else {
                 // take it back out
-                var index = this.authentications.indexOf(authentication);
-                this.authentications.splice(index, 1);
+                var index = _this.authentications.indexOf(authentication);
+                _this.authentications.splice(index, 1);
                 return false;
             }
         });
@@ -1254,7 +1255,7 @@ prototype.requestAuthentication = function(absURL) {
 prototype.authenticate = function(loginURL, credentials, allowURLs) {
     var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
-    return this.post(loginAbsURL, credentials).then(function(response) {
+    return this.post(loginAbsURL, credentials, true).then(function(response) {
         var token = (response) ? response.key : null;
         if (!token) {
             throw new RelaksDjangoDataSourceError(403, 'No authorization token');
@@ -1476,15 +1477,16 @@ prototype.checkExpiration = function() {
  * Perform an HTTP GET operation
  *
  * @param  {String} url
+ * @param  {Boolean|undefined} noAuth
  *
  * @return {Promise<Object>}
  */
-prototype.get = function(url) {
+prototype.get = function(url, noAuth) {
     var options = {
         method: 'GET',
         headers: {},
     };
-    return this.request(url, options);
+    return this.request(url, options, noAuth);
 };
 
 /**
@@ -1492,10 +1494,11 @@ prototype.get = function(url) {
  *
  * @param  {String} url
  * @param  {Object} object
+ * @param  {Boolean|undefined} noAuth
  *
  * @return {Promise<Object>}
  */
-prototype.post = function(url, object) {
+prototype.post = function(url, object, noAuth) {
     var options = {
         method: 'POST',
         mode: 'cors',
@@ -1505,7 +1508,7 @@ prototype.post = function(url, object) {
         },
         body: JSON.stringify(object),
     };
-    return this.request(url, options);
+    return this.request(url, options, noAuth);
 };
 
 /**
@@ -1513,10 +1516,11 @@ prototype.post = function(url, object) {
  *
  * @param  {String} url
  * @param  {Object} object
+ * @param  {Boolean|undefined} noAuth
  *
  * @return {Promise<Object>}
  */
-prototype.put = function(url, object) {
+prototype.put = function(url, object, noAuth) {
     var options = {
         method: 'PUT',
         mode: 'cors',
@@ -1526,24 +1530,25 @@ prototype.put = function(url, object) {
         },
         body: JSON.stringify(object),
     };
-    return this.request(url, options);
+    return this.request(url, options, noAuth);
 };
 
 /**
  * Perform an HTTP DELETE operation
  *
  * @param  {String} url
+ * @param  {Boolean|undefined} noAuth
  *
  * @return {Promise<null>}
  */
-prototype.delete = function(url) {
+prototype.delete = function(url, noAuth) {
     var options = {
         method: 'DELETE',
         mode: 'cors',
         cache: 'no-cache',
         headers: {},
     };
-    return this.request(url, options);
+    return this.request(url, options, noAuth);
 };
 
 /**
@@ -1551,10 +1556,11 @@ prototype.delete = function(url) {
  *
  * @param  {String} url
  * @param  {Object} options
+ * @param  {Boolean|undefined} noAuth
  *
  * @return {Promise}
  */
-prototype.request = function(url, options) {
+prototype.request = function(url, options, noAuth) {
     var _this = this;
     var token = this.getAuthorizationToken(url);
     if (token) {
@@ -1567,7 +1573,7 @@ prototype.request = function(url, options) {
                 return null;
             }
             return response.json();
-        } else if (response.status === 401) {
+        } else if (response.status === 401 && !noAuth) {
             return _this.requestAuthentication(url).then(function(authenticated) {
                 if (authenticated) {
                     delete options.headers['Authorization'];
