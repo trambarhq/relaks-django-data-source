@@ -29,9 +29,35 @@ let options = {
 };
 let dataSource = new DjangoDataSource(options);
 dataSource.activate();
-dataSource.addEventListener('change', handleDataChange);
-
 ```
+
+```javascript
+/* Root-level React component */
+class Application extends PureComponent {
+    constructor(props) {
+        super(props);
+        let { dataSource } = props;
+        this.state = {
+            database: new Database(dataSource);
+        }
+    }
+
+    componentDidMount() {
+        let { dataSource } = this.props;
+        routeManager.addEventListener('change', this.handleDataSourceChange);
+    }
+
+    /* ... */
+
+    handleDataSourceChange = (evt) => {
+        let { dataSource } = this.props;
+        let database = new Database(dataSource);
+        this.setState({ database });
+    }
+}
+```
+
+Components are expected to access functionalities of the data source through a proxy object--`Database` in the sample code above. See the documentation of Relaks for an [explanation](https://github.com/chung-leong/relaks#proxy-objects). A [default implementation](https://github.com/chung-leong/relaks-django-data-source/blob/master/proxy.js) is provided for reference purpose. It's recommended that you create your own.
 
 ## Options
 
