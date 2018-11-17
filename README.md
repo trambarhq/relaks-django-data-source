@@ -305,29 +305,48 @@ When URL keys are used, `folderURL` can be omitted (since the objects contain th
 async function authenticate(loginURL: string, credentials: object, allowURLs?: string[]): boolean
 ```
 
+Gain elevated access to a Django server. `loginURL` is the [REST endpoint for logging in](https://django-rest-auth.readthedocs.io/en/latest/api_endpoints.html#basic). `credentials` is an object containng `username` (or `email`) and `password`. `allowURLs` is the list of URLs that will become accessible. The last parameter can typically be omitted. It defaults to `[ "/" ]`, meaning all resources under `baseURL` will become accessible.
+
+
+The fulfillment value of this method is `true` when the login process succeeds. If it fails, the promise will be rejected.
+
+An `authorization` event occurs when the data source acquire an authorization token. This give you a chance to save the token for use later.
+
 ### authorize
 
 ```typescript
-async function authorize(loginURL: string, token: string, allowURLs?: string[], fresh?: boolean): boolean
+async function authorize(token: string, allowURLs?: string[], fresh?: boolean): boolean
 ```
+
+Provide a Django authorization token to the data source, likely one that was saved from an earlier authentication. `allowURLs` indicates the scope of access. It can typically be omitted. `fresh` indicates whether the token was just obtained from the remote server. If omitted, `evt.fresh` will be `false` in the subsequent `authorization` event. Your code can then elect not to save the token again.
 
 ### cancelAuthentication
 
 ```typescript
-function cancelAuthentication(allowURLs: string[]): void
+function cancelAuthentication(allowURLs?: string[]): void
 ```
+
+Tell the data source to stop waiting for authentication. Operations that have encounter the HTTP status code 401 will then fail.
 
 ### cancelAuthorization
 
 ```typescript
-function cancelAuthorization(denyURLs: string[]): void
+function cancelAuthorization(denyURLs?: string[]): void
 ```
+
+Remove authorization to certain URLs. This can be used to force the user to authenticate again before a sensitive area of your app can be accessed.
+
+This method does not trigger any event.
 
 ### revokeAuthorization
 
 ```typescript
-function revokeAuthorization(logoutURL): void
+function revokeAuthorization(logoutURL: string, denyURLs?: string[]): void
 ```
+
+Log out from a Django server. `logoutURL` is the [REST endpoint for logging out](https://django-rest-auth.readthedocs.io/en/latest/api_endpoints.html#basic). `denyURLs` is the list of URLs from which authorization will be removed. It can typically be omitted.
+
+An `deauthorization` event will occur afterward. This give you a chance to remove a saved authorization token.
 
 ### delete
 
@@ -405,7 +424,13 @@ A string can be used to specify a predefined hook function. The possible values 
 
 ### afterUpdate
 
-When existing objects are modified using `updateOne()` or `updateMultiple()`, a query's `afterUpdate` hook is invoked so that cached results are updated.
+When existing objects are modified using `updateOne()` or `updateMultiple()`, a query's `afterUpdate` hook is invoked so that cached results are updated. It's also invoked when the data source fetches a more recent copy of an object. Consider the following scenario:
+
+1. `fetchOne()` retrieves object A from the server
+2. Object A is modified on the server side
+3. `fetchList()` retrieves object A, B, C, and D from the server
+
+Query 1's `afterUpdate` hook will be invoked because query 3 has obtained a newer copy of object A. Since the default hook in this case is `"replace"`, query 1 will now also yield the newer copy.
 
 For queries performed through `fetchOne()`, the hook function has the form:
 
@@ -441,6 +466,7 @@ A string can be used to specify a predefined hook function. The possible values 
 * [authentication](#authentication)
 * [authorization](#authorization)
 * [change](#change)
+* [deauthorization](#deauthorization)
 
 ### authentication
 
@@ -466,7 +492,7 @@ Wait for authentication to occur then try again.
 
 ### authorization
 
-The `authorization` event is emitted when the data source receives an authorization token, either from the server after a call to `authenticate()` or from your app via `authorize()`.
+An `authorization` event is emitted when the data source receives an authorization token, either from the server after a call to `authenticate()` or from your app via `authorize()`.
 
 **Default action:**
 
@@ -474,9 +500,9 @@ Allow operations waiting for authentication to proceed.
 
 **Properties:**
 
+* `allowURLs` - a list of URLs that have become accessible
 * `fresh` - whether the token was freshly issued by the server
 * `token` - the authorization token
-* `url` - the login URL used
 * `defaultPrevented` - whether `preventDefault()` was called
 * `propagationStopped` - whether `stopImmediatePropagation()` was called
 * `target` - the data source
@@ -499,6 +525,21 @@ A `change` event is emitted whenever rerunning queries might yield new result se
 * `propagationStopped` - whether `stopImmediatePropagation()` was called
 * `target` - the data source
 * `type` - `"change"`
+
+**Methods:**
+
+* `stopImmediatePropagation()` - stop other listeners from receiving the event
+
+### deauthorization
+
+A `deauthorization` event is emitted after `revokeAuthorization()` has logged out from a Django server.
+
+**Properties:**
+
+* `denyURLs` - a list of URLs that might no longer be accessible
+* `propagationStopped` - whether `stopImmediatePropagation()` was called
+* `target` - the data source
+* `type` - `"deauthorization"`
 
 **Methods:**
 

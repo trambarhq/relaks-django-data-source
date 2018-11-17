@@ -143,6 +143,23 @@ describe('Fetch methods:', function() {
                     expect(err).to.have.property('status', 404);
                 });
             })
+            it ('should update query by fetchOne() when fresher objects are retrieved', function() {
+                var dataSource = new DjangoDataSource({ baseURL });
+                return dataSource.fetchOne(`/tasks/7/`).then((object) => {
+                    return TestServer.update(object.id, { category: 'dingo' }).then(() => {
+                        return dataSource.fetchList(`/tasks`).then((objects) => {
+                            var object = objects.find((obj) => {
+                                return obj.id === 7;
+                            });
+                            expect(object).to.have.property('category', 'dingo');
+                            expect(dataSource.isCached('/tasks/7/', true)).to.be.true;
+                            return dataSource.fetchOne(`/tasks/7/`).then((object) => {
+                                expect(object).to.have.property('category', 'dingo');
+                            });
+                        });
+                    });
+                });
+            })
             it ('should invalidate another query by when fresher objects are retrieved', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
                 var options = { minimum: '100%' };
