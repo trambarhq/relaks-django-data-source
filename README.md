@@ -108,7 +108,7 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 * [fetchOne()](#fetchone)
 * [fetchPage()](#fetchpage)
 
-** Cache invalidation:**
+**Cache invalidation:**
 
 * [invalidate()](#invalidate)
 * [invalidateList()](#invalidatelist)
@@ -127,11 +127,12 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 
 **Access control:**
 
-* [authenticate()](authenticate)
-* [authorize()](authorize)
-* [cancelAuthentication()](cancelauthentication)
-* [cancelAuthorization()](cancelauthorization)
-* [revokeAuthorization()](revokeauthorization)
+* [authenticate()](#authenticate)
+* [authorize()](#authorize)
+* [cancelAuthentication()](#cancelauthentication)
+* [cancelAuthorization()](#cancelauthorization)
+* [isAuthorized()](#isauthorized)
+* [revokeAuthorization()](#revokeauthorization)
 
 **HTTP request:**
 
@@ -377,6 +378,14 @@ function cancelAuthorization(denyURLs?: string[]): void
 Remove authorization to certain URLs. This can be used to force the user to authenticate again before a sensitive area of your app can be accessed.
 
 This method does not trigger any event.
+
+### isAuthorized
+
+```typescript
+function isAuthorized(url?: string): boolean
+```
+
+Return true if the data source has an authorization token for the identicated location. `url` can be omitted, in which case it defaults to `"/"`.
 
 ### revokeAuthorization
 

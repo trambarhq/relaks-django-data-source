@@ -40,7 +40,9 @@ describe('Authentication:', function() {
             var credentials = { username: 'sam', password: 'beer' };
             dataSource.authenticate(loginURL, credentials);
         });
-        return expect(dataSource.fetchOne(`/tasks/5/`)).to.eventually.be.fulfilled;
+        return expect(dataSource.fetchOne(`/tasks/5/`)).to.eventually.be.fulfilled.then(() => {
+            expect(dataSource.isAuthorized()).to.be.true;
+        });
     })
     it ('should fail with incorrect password and succeed with correct one', function() {
         var dataSource = new DjangoDataSource({ baseURL });

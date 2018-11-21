@@ -1192,7 +1192,20 @@ prototype.deriveQuery = function(absURL, add) {
         }
         return query;
     }
-}
+};
+
+/**
+ * Return true when there's an authorization token
+ *
+ * @param  {String|undefined} url
+ *
+ * @return {Boolean}
+ */
+prototype.isAuthorized = function(url) {
+    var absURL = this.resolveURL(url || '/');
+    var token = this.getToken(absURL);
+    return !!token;
+};
 
 /**
  * Return a promise that will be fulfilled with the authorization token
