@@ -1,6 +1,6 @@
 Relaks Django Data Source
 -------------------------
-This module lets you access a Django server from a React app that uses [Relaks](https://github.com/chung-leong/relaks). It's designed to work with [Django REST framework](https://www.django-rest-framework.org/).
+This module lets you access a Django server from a React app that use [Relaks](https://github.com/chung-leong/relaks). It's designed to work with the [Django REST framework](https://www.django-rest-framework.org/).
 
 * [Installation](#installation)
 * [Usage](#usage)
@@ -44,7 +44,7 @@ class Application extends PureComponent {
 
     componentDidMount() {
         let { dataSource } = this.props;
-        routeManager.addEventListener('change', this.handleDataSourceChange);
+        dataSource.addEventListener('change', this.handleDataSourceChange);
     }
 
     /* ... */
@@ -68,7 +68,7 @@ Components are expected to access functionalities of the data source through a p
 
 ### abbreviatedFolderContents
 
-A boolean value indicating whether objects in directory listings are always different from those fetched individually. Normally, when you ask for a single object, the data source will check to see if the object can be found in an existing directory query. For example, it'll check queries on `/articles/` when you request `/articles/5/`. This behavior would lead to erroneous results if objects in a directory listing only contains a subset of their properties. Setting `abbreviatedFolderContents` to `true` disables it completely.
+A boolean value indicating whether objects in directory listings are always different from those fetched individually. Normally, when you ask for a single object, the data source will check to see if the object can be found in a cached directory query. For example, it'll check queries on `/articles/` when you request `/articles/5/`. This behavior would lead to erroneous results if objects in a directory listing only contains a subset of their properties. Setting `abbreviatedFolderContents` to `true` disables it completely.
 
 You can also flag queries as abbreviated selectively.
 
@@ -82,7 +82,7 @@ The keyword that precedes the token in the HTTP Authorization header:
 Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b
 ```
 
-The default matches what Django REST Framework's [TokenAuthentication scheme](https://www.django-rest-framework.org/api-guide/authentication/#tokenauthentication) uses. You don't need to supply this unless you have subclassed `TokenAuthentication` and changed the keyword to something else.
+The default matches what the Django REST Framework's [TokenAuthentication scheme](https://www.django-rest-framework.org/api-guide/authentication/#tokenauthentication) uses. You don't need to supply this unless you have subclassed `TokenAuthentication` and changed the keyword to something else.
 
 ### baseURL
 
@@ -92,7 +92,7 @@ The base URL of the remote server. It'll be added to any URL that isn't absolute
 
 The amount of time, in milliseconds, to wait before rerunning data queries to ensure freshness. The data source caches all queries. When a query matches one that was performed before, the results obtained earlier will be returned immediately. If the amount of time elapsed since exceeds `refreshInterval`, the data source will rerun the query. If the results differ in anyway, a `change` event will occur.
 
-You can always manually flag queries as out-of-date by calling [invalidate()](#invalidate).
+You can also manually flag queries as out-of-date by calling [invalidate()](#invalidate).
 
 ## Methods
 
@@ -107,7 +107,14 @@ You can always manually flag queries as out-of-date by calling [invalidate()](#i
 * [fetchMultiple()](#fetchmultiple)
 * [fetchOne()](#fetchone)
 * [fetchPage()](#fetchpage)
+
+** Cache invalidation:**
+
 * [invalidate()](#invalidate)
+* [invalidateList()](#invalidatelist)
+* [invalidateMultiple()](#invalidatemultiple)
+* [invalidateOne()](#invalidateone)
+* [invalidatePage()](#invalidatepage)
 
 **Data modification:**
 
@@ -159,15 +166,15 @@ Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-even
 async function fetchList(url: string, options?: object): object[]
 ```
 
-Conceptually, fetch all objects in a directory. In actuality, the method will only return the first page of results initially (when pagination is enabled). Attached to the returned array will be the method `more()`. When it's called, an additional page will be fetched and appended to the list.
+Conceptually, fetch all objects in a directory. In actuality, the method will only return the first page of results initially (when pagination is enabled). Attached to the returned array will be a method called `more()`. When it's called, an additional page will be fetched and appended to the list.
 
 This method is designed for handling large result sets with continuous scrolling (as opposed to traditional pagination).
 
 In addition to `more()`, the returned array will also have the property `total`. It's the number of objects in the directory on the server. The standard property `length` gives the number of objects already retrieved.
 
-`more` and `total` are always present, even when pagination is not available. Calls to `more()` does nothing when there are no more pages.
+`more()` and `total` are always present, even when pagination is not available. A call to `more()` does nothing when there are no more pages.
 
-By default, `fetchList()` will return as soon as it has any data. Specifying the option `minimum` forces it to wait until a certain number of objects have become available. When `minimum` is a negative number, that's interpreted as the difference from the total. When `minimum` is a string, it's expected to hold a percentage of the total. For example, `100%` means grabbing everything.
+By default, `fetchList()` will return as soon as it has one page of results. Specifying the option `minimum` forces it to wait until a certain number of objects have become available. When `minimum` is a negative number, that's interpreted as the difference from the total. When `minimum` is a string, it's expected to hold a percentage of the total. For example, `100%` means the complete data set.
 
 **Options:**
 
@@ -183,9 +190,9 @@ By default, `fetchList()` will return as soon as it has any data. Specifying the
 async function fetchMultiple(urls: string[], options?: object): object[]
 ```
 
-Fetch multiple objects in a single call. It's convenience method designed for handling one-to-many relations.
+Fetch multiple objects in a single call. This is convenience method designed for handling one-to-many relations. It calls `fetchOne()` internally.
 
-By default, the promise returned by `fetchMultiple()` is not fulfilled until every object is retrieved from the remote server. When the option `minimum` is specified, the promise will fulfill immediately when the number of cached objects meets the requirement. `null` will appear in place of an object in the array when it's uncached. When the uncached objects finally arrive, the data source emits a `change` event. Subsequent calls to `fetchMultiple()` will then return all requested objects.
+By default, the promise returned by `fetchMultiple()` is not fulfilled until every object is retrieved from the remote server. When the option `minimum` is specified, the promise will fulfill immediately when the number of cached objects meets the requirement. `null` will appear in place of an object in the array when it's uncached. When the uncached objects eventually arrive, the data source emits a `change` event. Subsequent calls to `fetchMultiple()` will then return all requested objects.
 
 **Options:**
 
@@ -222,10 +229,44 @@ Fetch a single page of a directory listing. All objects will be returned if the 
 ### invalidate
 
 ```typescript
-function invalidate(props: object): boolean
+function invalidate(time: string): boolean
 ```
 
-Flag matching data queries as out-of-date. `props` may contain two properties: `url` and `time`. `url` can be either an absolute URL or an relative URL. It let you to invalidate a specific object or all objects in a directory. For example, `/articles/` would match `/articles/5/`, `/articles/6/` as well as queries on `/articles/`. Meanwhile, `/articles/5/` would match a query for the object itself and any query on `/articles/` that happens to have that object. `time` can be used to invalidate objects retrieved prior to a given time. It should be a `Date` object or an ISO timestamp.
+Flag matching data queries performed before the specified time as out-of-date. `time` should be an ISO timestamp (a `Date` object is also acceptable). The methods returns `true` when queries have been invalidated and `false` otherwise.
+
+The data source emits a `change` event when queries are invalidated.
+
+### invalidateList
+
+```typescript
+function invalidateList(url:string, options?: object): boolean
+```
+
+Invalidate a query performed earlier using `fetchList()`.
+
+### invalidateMultiple
+
+```typescript
+function invalidateMultiple(urls:string[], options?: object): boolean
+```
+
+Invalidate multiple queries performed earlier using `fetchOne()`.
+
+### invalidatePage
+
+```typescript
+function invalidatePage(url:string, page: number, options?: object): boolean
+```
+
+Invalidate a query performed earlier using `fetchPage()`.
+
+### invalidateOne
+
+```typescript
+function invalidateOne(url:string, options?: object): boolean
+```
+
+Invalidate a query performed earlier using `fetchOne()`.
 
 ### deleteOne
 
@@ -237,7 +278,7 @@ async function deleteOne(folderURL: string, object: object): object
 async function deleteOne(object: object): object
 ```
 
-Delete an object on the remote server.
+Delete an object on the remote server. The `afterDelete` hooks of cached queries are invoked afterward.
 
 When URL keys are used, `folderURL` can be omitted (since the object contains its own URL).
 
@@ -251,7 +292,7 @@ function deleteMultiple(folderURL: string, objects: object[]): object[]
 function deleteMultiple(objects: object[]): object[]
 ```
 
-Delete multiple objects on the remote server.
+Delete multiple objects on the remote server. The `afterDelete` hooks of cached queries are invoked afterward.
 
 When URL keys are used, `folderURL` can be omitted (since the objects contain their own URLs).
 
@@ -261,7 +302,7 @@ When URL keys are used, `folderURL` can be omitted (since the objects contain th
 async function insertOne(folderURL: string, object: object): object
 ```
 
-Insert an object into a directory on the remote server.
+Insert an object into a directory on the remote server. The `afterInsert` hooks of cached queries are invoked afterward. The inserted object will be available through `fetchOne()` immediately.
 
 ### insertMultiple
 
@@ -269,7 +310,7 @@ Insert an object into a directory on the remote server.
 async function  insertMultiple(folderURL: string, objects: object[]): object[]
 ```
 
-Insert multiple objects into a directory on the remote server.
+Insert multiple objects into a directory on the remote server. The `afterInsert` hooks of cached queries are invoked afterward. The inserted objects will be available through `fetchOne()` immediately.
 
 ### updateOne
 
@@ -281,7 +322,7 @@ async function updateOne(folderURL: string, object: object): object
 async function updateOne(object: object): object
 ```
 
-Update an object on the remote server.
+Update an object on the remote server. The `afterUpdate` hooks of cached queries are invoked afterward.
 
 When URL keys are used, `folderURL` can be omitted (since the object contains its own URL).
 
@@ -295,7 +336,7 @@ function updateMultiple(folderURL: string, objects: object[]): object[]
 function updateMultiple(objects: object[]): object[]
 ```
 
-Update multiple objects on the remote server.
+Update multiple objects on the remote server. The `afterUpdate` hooks of cached queries are invoked afterward.
 
 When URL keys are used, `folderURL` can be omitted (since the objects contain their own URLs).
 
@@ -305,12 +346,11 @@ When URL keys are used, `folderURL` can be omitted (since the objects contain th
 async function authenticate(loginURL: string, credentials: object, allowURLs?: string[]): boolean
 ```
 
-Gain elevated access to a Django server. `loginURL` is the [REST endpoint for logging in](https://django-rest-auth.readthedocs.io/en/latest/api_endpoints.html#basic). `credentials` is an object containng `username` (or `email`) and `password`. `allowURLs` is the list of URLs that will become accessible. The last parameter can typically be omitted. It defaults to `[ "/" ]`, meaning all resources under `baseURL` will become accessible.
-
+Gain elevated access to a Django server. `loginURL` is the [REST endpoint for logging in](https://django-rest-auth.readthedocs.io/en/latest/api_endpoints.html#basic). `credentials` is an object containng `username` (or `email`) and `password`. `allowURLs` is the list of URLs that will become accessible. This parameter is designed for apps that access multiple servers. It can typically be omitted. Its default value is `[ "/" ]`, meaning all resources under `baseURL` will become accessible.
 
 The fulfillment value of this method is `true` when the login process succeeds. If it fails, the promise will be rejected.
 
-An `authorization` event occurs when the data source acquire an authorization token. This give you a chance to save the token for use later.
+An `authorization` event occurs when the data source acquire an authorization token. This give you a chance to save the token for use in a future session.
 
 ### authorize
 
@@ -326,7 +366,7 @@ Provide a Django authorization token to the data source, likely one that was sav
 function cancelAuthentication(allowURLs?: string[]): void
 ```
 
-Tell the data source to stop waiting for authentication. Operations that have encounter the HTTP status code 401 will then fail.
+Tell the data source to stop waiting for authentication. Operations that had encountered the HTTP status code 401 will then fail.
 
 ### cancelAuthorization
 
@@ -347,6 +387,8 @@ function revokeAuthorization(logoutURL: string, denyURLs?: string[]): void
 Log out from a Django server. `logoutURL` is the [REST endpoint for logging out](https://django-rest-auth.readthedocs.io/en/latest/api_endpoints.html#basic). `denyURLs` is the list of URLs from which authorization will be removed. It can typically be omitted.
 
 An `deauthorization` event will occur afterward. This give you a chance to remove a saved authorization token.
+
+A change event will also occur after the data source removed cached queries.
 
 ### delete
 
@@ -401,10 +443,10 @@ function afterDeleteHook(object: object, deletedObject: object): object
 For queries performed through `fetchPage()` or `fetchList`, the hook function has the form:
 
 ```typescript
-function afterUpdateHook(objects: objects[], newObjects: objects[]): objects[]
+function afterDeleteHook(objects: objects[], deletedObjects: objects[]): objects[]
 ```
 
-`objects` are the currently cached objects, while `newObjects` is a list of deleted objects. The function should return a new array not containing the deleted objects (the default behavior). If there's no change, it should return `false`. If it returns `true`, the query will be refreshed.
+`objects` are the currently cached objects, while `deletedObjects` is a list of deleted objects. The function should return a new array not containing the deleted objects (the default behavior). If there's no change, it should return `false`. If it returns `true`, the query will be refreshed.
 
 A string can be used to specify a predefined hook function. The possible values are `"refresh"`, `"ignore"`, `"remove"`.
 
@@ -446,7 +488,7 @@ For queries performed through `fetchPage()` or `fetchList`, the hook function ha
 function afterUpdateHook(objects: object[], newObjects: object[]): object[]
 ```
 
-`objects` are the currently cached objects, while `newObjects` is a list of modified objects. The function should return a new array with old objects replaced by new one. If there's no change, the function should return `false`. If the function return `true`, the query will be invalidated.
+`objects` are the currently cached objects, while `newObjects` is a list of modified objects. The function should return a new array with old objects replaced by new ones. If there's no change, the function should return `false`. If the function return `true`, the query will be invalidated.
 
 The function might need to sort the objects if changes can impact their order.
 
@@ -514,7 +556,7 @@ Allow operations waiting for authentication to proceed.
 * `preventDefault()` - stop pending operations from proceeding despite authorization having been granted
 * `stopImmediatePropagation()` - stop other listeners from receiving the event
 
-Generally, there's no reason to prevent the default behavior from happen. Do so only makes sense if the app fails to gain some other authorization.
+Generally, there's no reason to prevent the default behavior from happen. Doing so only makes sense if the app has failEd to gain some other necessary authorization.
 
 ### change
 
@@ -534,15 +576,22 @@ A `change` event is emitted whenever rerunning queries might yield new result se
 
 A `deauthorization` event is emitted after `revokeAuthorization()` has logged out from a Django server.
 
+**Default action:**
+
+Clear cache queries.
+
 **Properties:**
 
 * `denyURLs` - a list of URLs that might no longer be accessible
+* `defaultPrevented` - whether `preventDefault()` was called
 * `propagationStopped` - whether `stopImmediatePropagation()` was called
 * `target` - the data source
 * `type` - `"deauthorization"`
 
 **Methods:**
 
+* `postponeDefault(promise: Promise)` - postpone the clearing of cached queries until the given promise is fulfilled
+* `preventDefault()` - prevent clearing of cached queries
 * `stopImmediatePropagation()` - stop other listeners from receiving the event
 
 ## Examples
