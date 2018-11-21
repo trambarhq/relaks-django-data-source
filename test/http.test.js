@@ -13,6 +13,7 @@ describe('Basic HTTP operations:', function() {
     describe('#get()', function() {
         it ('should be able to perform a GET request', function() {
             var dataSource = new DjangoDataSource;
+            dataSource.activate();
             return dataSource.get(testURL).then((response) => {
                 expect(response).to.have.property('status', 'ok');
             })
@@ -21,6 +22,7 @@ describe('Basic HTTP operations:', function() {
     describe('#post()', function() {
         it ('should be able to perform a POST request', function() {
             var dataSource = new DjangoDataSource;
+            dataSource.activate();
             return dataSource.post(testURL, {}).then((response) => {
                 expect(response).to.have.property('status', 'ok');
             })
@@ -29,6 +31,7 @@ describe('Basic HTTP operations:', function() {
     describe('#put()', function() {
         it ('should be able to perform a PUT request', function() {
             var dataSource = new DjangoDataSource;
+            dataSource.activate();
             return dataSource.put(testURL, {}).then((response) => {
                 expect(response).to.have.property('status', 'ok');
             })
@@ -37,6 +40,7 @@ describe('Basic HTTP operations:', function() {
     describe('#delete()', function() {
         it ('should be able to perform a DELETE request', function() {
             var dataSource = new DjangoDataSource;
+            dataSource.activate();
             return dataSource.delete(testURL, {}).then((response) => {
                 expect(response).to.have.property('status', 'ok');
             })

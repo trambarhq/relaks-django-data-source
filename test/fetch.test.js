@@ -16,6 +16,7 @@ describe('Fetch methods:', function() {
     describe('#fetchOne', function() {
         it ('should fetch an object from remote server', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne(`/tasks/5/`).then((object) => {
                 expect(object).to.have.property('id', 5);
                 expect(object).to.have.property('category', 'drinking');
@@ -23,6 +24,7 @@ describe('Fetch methods:', function() {
         })
         it ('should cache an object', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne(`/tasks/6/`).then((object1) => {
                 return dataSource.fetchOne(`/tasks/6/`).then((object2) => {
                     expect(object2).to.equal(object1);
@@ -31,6 +33,7 @@ describe('Fetch methods:', function() {
         })
         it ('should fail with status code 404 when object does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne(`/tasks/555/`).then((object) => {
                 throw new Error('Operation should fail');
             }, (err) => {
@@ -40,6 +43,7 @@ describe('Fetch methods:', function() {
         })
         it ('should invalidate a query by fetchList() when a fresher copy is retrieved', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { minimum: '100%' };
             return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                 var object1 = objects[0];
@@ -61,6 +65,7 @@ describe('Fetch methods:', function() {
         });
         it ('should replace object in a query by fetchList() when a fresher copy is retrieved', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { minimum: '100%', afterUpdate: 'replace' };
             return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                 var object2 = objects[1];
@@ -84,6 +89,18 @@ describe('Fetch methods:', function() {
                 });
             });
         });
+        it ('should not proceed until the data source is activated', function() {
+            var dataSource = new DjangoDataSource({ baseURL });
+            var unpaused = false;
+            //dataSource.activate();
+            setTimeout(() => {
+                unpaused = true;
+                dataSource.activate();
+            }, 100);
+            return dataSource.fetchOne(`/tasks/5/`).then((object) => {
+                expect(unpaused).to.be.true;
+            });
+        })
     })
     describe('#fetchList', function() {
         describe('(no pagination)', function() {
@@ -93,6 +110,7 @@ describe('Fetch methods:', function() {
 
             it ('should fetch all objects from remote server', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects) => {
                     expect(objects).to.be.an.instanceof(Array)
                         .that.has.property('length', 100);
@@ -100,6 +118,7 @@ describe('Fetch methods:', function() {
             })
             it ('should cache objects', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects1) => {
                     return dataSource.fetchList(`/tasks/`).then((objects2) => {
                         expect(objects2).to.equal(objects1);
@@ -108,6 +127,7 @@ describe('Fetch methods:', function() {
             })
             it ('should cache objects for fetchOne() as well', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects) => {
                     var object1 = objects[3]
                     return dataSource.fetchOne(`/tasks/${object1.id}/`).then((object2) => {
@@ -117,6 +137,7 @@ describe('Fetch methods:', function() {
             })
             it ('should not provide objects to fetchOne() when abbreviated is set', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { abbreviated: true };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     var object1 = objects[3]
@@ -127,6 +148,7 @@ describe('Fetch methods:', function() {
             })
             it ('should return results with dummy more() function and total', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects) => {
                     expect(objects).to.have.property('more')
                         .that.is.instanceof(Function);
@@ -136,6 +158,7 @@ describe('Fetch methods:', function() {
             })
             it ('should fail with status code 404 when object type does not exist', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/jobs/`).then((object) => {
                     throw new Error('Operation should fail');
                 }, (err) => {
@@ -145,6 +168,7 @@ describe('Fetch methods:', function() {
             })
             it ('should update query by fetchOne() when fresher objects are retrieved', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchOne(`/tasks/7/`).then((object) => {
                     return TestServer.update(object.id, { category: 'dingo' }).then(() => {
                         return dataSource.fetchList(`/tasks`).then((objects) => {
@@ -162,6 +186,7 @@ describe('Fetch methods:', function() {
             })
             it ('should invalidate another query by when fresher objects are retrieved', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: '100%' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     var object1 = objects[0];
@@ -181,6 +206,7 @@ describe('Fetch methods:', function() {
 
             it ('should fetch the first page, with more() and total attached to result', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects) => {
                     expect(objects).to.be.an.instanceof(Array)
                         .that.has.property('length', 15);
@@ -192,6 +218,7 @@ describe('Fetch methods:', function() {
             })
             it ('should trigger a change event, when more() is called', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var changeEvent;
                 dataSource.addEventListener('change', (evt) => {
                     changeEvent = evt;
@@ -209,6 +236,7 @@ describe('Fetch methods:', function() {
             })
             it ('should fetch enough records to meet minimum requirement', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: 25 };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 2 > 25
@@ -217,6 +245,7 @@ describe('Fetch methods:', function() {
             })
             it ('should interpret negative minimum as that amount off the total', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: -25 };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 5 = 100 - 25
@@ -225,6 +254,7 @@ describe('Fetch methods:', function() {
             })
             it ('should handle minimum specified as percentage', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: ' 25% ' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 2 > 100 * 25%
@@ -233,6 +263,7 @@ describe('Fetch methods:', function() {
             })
             it ('should handle minimum specified as negative percentage', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: ' -20% ' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     // 15 * 6 > 100 - (100 * 20)%
@@ -241,6 +272,7 @@ describe('Fetch methods:', function() {
             })
             it ('should invalidate another query by when fresher objects are retrieved', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var options = { minimum: '100%' };
                 return dataSource.fetchList(`/tasks/`, options).then((objects) => {
                     var object1 = objects[0];
@@ -260,6 +292,7 @@ describe('Fetch methods:', function() {
 
             it ('should cache objects for fetchOne() as well', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchList(`/tasks/`).then((objects) => {
                     var object1 = objects[3]
                     return dataSource.fetchOne(object1.url).then((object2) => {
@@ -277,6 +310,7 @@ describe('Fetch methods:', function() {
 
         it ('should fetch the first page, with total attached to result', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage(`/tasks/`, 1).then((objects) => {
                 expect(objects).to.be.an.instanceof(Array)
                     .that.has.property('length', 20);
@@ -286,6 +320,7 @@ describe('Fetch methods:', function() {
         })
         it ('should fetch the second page', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage(`/tasks/`, 2).then((objects) => {
                 expect(objects).to.be.an.instanceof(Array)
                     .that.has.property('length', 20);
@@ -294,6 +329,7 @@ describe('Fetch methods:', function() {
         })
         it ('should cache objects', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage(`/tasks/`, 2).then((objects1) => {
                 return dataSource.fetchPage(`/tasks/`, 2).then((objects2) => {
                     expect(objects2).to.equal(objects1);
@@ -302,6 +338,7 @@ describe('Fetch methods:', function() {
         })
         it ('should cache objects for fetchOne() as well', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage(`/tasks/`, 3).then((objects) => {
                 var object1 = objects[3]
                 return dataSource.fetchOne(`/tasks/${object1.id}/`).then((object2) => {
@@ -311,6 +348,7 @@ describe('Fetch methods:', function() {
         })
         it ('should not provide objects to fetchOne() when abbreviated is set', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { abbreviated: true };
             return dataSource.fetchPage(`/tasks/`, 3, options).then((objects) => {
                 var object1 = objects[3]
@@ -321,6 +359,7 @@ describe('Fetch methods:', function() {
         })
         it ('should fail with status code 404 when object type does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchList(`/jobs/`).then((object) => {
                 throw new Error('Operation should fail');
             }, (err) => {
@@ -336,6 +375,7 @@ describe('Fetch methods:', function() {
 
         it ('should fetch multiple objects', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var urls = [];
             for (var i = 1; i <= 20; i += 2) {
                 urls.push(`/tasks/${i}`);
@@ -346,6 +386,7 @@ describe('Fetch methods:', function() {
         })
         it ('should return partial results when the number meet the mimimum specified', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var urls = [];
             for (var i = 1; i <= 20; i += 2) {
                 urls.push(`/tasks/${i}`);
@@ -365,6 +406,7 @@ describe('Fetch methods:', function() {
         })
         it ('should trigger change event once full list becomes available', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var urls = [];
             for (var i = 1; i <= 20; i += 2) {
                 urls.push(`/tasks/${i}`);
@@ -394,6 +436,7 @@ describe('Fetch methods:', function() {
         })
         it ('should fail with when one of the objects does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var urls = [
                 `/tasks/99`,
                 `/tasks/100`,

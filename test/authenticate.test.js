@@ -17,6 +17,7 @@ describe('Authentication:', function() {
 
     it ('should fail when trying to fetch data without authenticating first', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         dataSource.addEventListener('authentication', (evt) => {
             evt.preventDefault();
         });
@@ -26,6 +27,7 @@ describe('Authentication:', function() {
     })
     it ('should fail when trying to fetch data with bogus authorization token', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         dataSource.addEventListener('authentication', (evt) => {
             dataSource.authorize('bogus');
         });
@@ -36,6 +38,7 @@ describe('Authentication:', function() {
     })
     it ('should succeed when correct credentials are supplied', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         dataSource.addEventListener('authentication', (evt) => {
             var credentials = { username: 'sam', password: 'beer' };
             dataSource.authenticate(loginURL, credentials);
@@ -46,6 +49,7 @@ describe('Authentication:', function() {
     })
     it ('should fail with incorrect password and succeed with correct one', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         var initialError;
         dataSource.addEventListener('authentication', (evt) => {
             var credentials = { username: 'sam', password: 'incorrect' };
@@ -62,6 +66,7 @@ describe('Authentication:', function() {
     })
     it ('should fail when password is incorrect and we cancel authentication', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         var initialError;
         dataSource.addEventListener('authentication', (evt) => {
             var credentials = { username: 'sam', password: 'incorrect' };
@@ -76,6 +81,7 @@ describe('Authentication:', function() {
     })
     it ('should fail when we cancel authentication right off the bat', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         var initialError;
         dataSource.addEventListener('authentication', (evt) => {
             dataSource.cancelAuthentication();
@@ -86,6 +92,7 @@ describe('Authentication:', function() {
     })
     it ('should emit an authorization event after authentication is successful', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         var authEvent;
         dataSource.addEventListener('authentication', (evt) => {
             var credentials = { username: 'sam', password: 'beer' };
@@ -100,6 +107,7 @@ describe('Authentication:', function() {
     })
     it ('should not be able to fetch data after authorization is revoked', function() {
         var dataSource = new DjangoDataSource({ baseURL });
+        dataSource.activate();
         var noAuth = false;
         dataSource.addEventListener('authentication', (evt) => {
             if (!noAuth) {

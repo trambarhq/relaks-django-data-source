@@ -101,6 +101,10 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 * [addEventListener()](#addeventlistener)
 * [removeEventListener()](#removeeventlistener)
 
+**Activation**
+* [activate()](#activate)
+* [deactivate()](#deactivate)
+
 **Data retrieval:**
 
 * [fetchList()](#fetchlist)
@@ -160,6 +164,24 @@ function removeEventListener(name: string, handler: function): void
 Detach an event listener from the data source. `handler` and `type` must match what were given to `addEventListener()`.
 
 Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-event-emitter).
+
+### activate
+
+```typescript
+function activate(): void
+```
+
+Activate the data source, allowing it to fetch data from a remote server.
+
+### deactivate
+
+```typescript
+function deactivate(): void
+```
+
+Deactivate the data source, keeping it from performing data requests. Operations that require accessing a remote server will be on hold indefinitely, until `activate()` is called.
+
+The data source will continue to return cached data after its deactivation.
 
 ### fetchList
 

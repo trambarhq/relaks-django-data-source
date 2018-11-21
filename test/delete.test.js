@@ -14,6 +14,7 @@ describe('Delete methods:', function() {
         describe('(numeric keys)', function() {
             it ('should delete an object', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchOne('/tasks/55').then((object) => {
                     return dataSource.deleteOne('/tasks/', object).then(() => {
                         return dataSource.fetchList('/tasks/').then((objects) => {
@@ -29,6 +30,7 @@ describe('Delete methods:', function() {
 
             it ('should fail with status code 404 when object does not exist', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var deletedObject = {
                     id: 101
                 };
@@ -47,6 +49,7 @@ describe('Delete methods:', function() {
 
             it ('should delete an object', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchOne('/tasks/55').then((object) => {
                     return dataSource.deleteOne(object).then(() => {
                         return dataSource.fetchList('/tasks/').then((objects) => {
@@ -68,6 +71,7 @@ describe('Delete methods:', function() {
 
         it ('should remove objects from list query by default', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchList('/tasks/').then((objects) => {
                 var slice = objects.slice(0, 5);
                 return dataSource.deleteMultiple('/tasks/', slice).then((deletedObjects) => {
@@ -84,6 +88,7 @@ describe('Delete methods:', function() {
 
         it ('should remove object query', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var urls = [ '/tasks/99', '/tasks/100' ];
             return dataSource.fetchMultiple(urls).then((objects) => {
                 expect(objects).to.have.length(2);
@@ -99,6 +104,7 @@ describe('Delete methods:', function() {
         })
         it ('should run custom hook function', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = {
                 afterDelete: (objects, deletedObjects) => {
                     return objects.map((object) => {
@@ -128,6 +134,7 @@ describe('Delete methods:', function() {
         })
         it ('should not fire change event when query has "ignore" as hook', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = {
                 afterDelete: 'ignore'
             };
@@ -146,6 +153,7 @@ describe('Delete methods:', function() {
         })
         it ('should fail with when one of the objects does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var objects = [
                 { id: 50 },
                 { id: 501 },
@@ -158,6 +166,7 @@ describe('Delete methods:', function() {
         })
         it ('should force refresh when an error occurs', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchList('/tasks/').then((objects) => {
                 var missing = objects[3]
                 var present = objects[4];
@@ -182,6 +191,7 @@ describe('Delete methods:', function() {
 
             it ('should force page query to refresh by default', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var deletedObjects;
                 return dataSource.fetchPage('/tasks/', 2).then((objects) => {
                     return new Promise((resolve, reject) => {

@@ -13,6 +13,7 @@ describe('Insert methods:', function() {
     describe('#insertOne()', function() {
         it ('should insert an object into remote database', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var object = {
                 title: 'Meet attractive women',
                 description: 'In order to better understand quantum mechanics',
@@ -30,6 +31,7 @@ describe('Insert methods:', function() {
         })
         it ('should fail with status code 404 when object type does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var object = {
                 title: 'Date attractive women',
                 description: 'To enhance the quality of business software',
@@ -50,6 +52,7 @@ describe('Insert methods:', function() {
 
         it ('should append objects to existing query', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterInsert: 'push' };
             return dataSource.fetchList('/tasks/', options).then((objects) => {
                 var objects = [
@@ -75,6 +78,7 @@ describe('Insert methods:', function() {
         });
         it ('should prepend objects to existing query', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterInsert: 'unshift' };
             return dataSource.fetchList('/tasks/', options).then((objects) => {
                 var objects = [
@@ -99,6 +103,7 @@ describe('Insert methods:', function() {
         });
         it ('should trigger refreshing of list query by default', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchList('/tasks/').then((objects) => {
                 return new Promise((resolve, reject) => {
                     // promise will resolve when change event occurs

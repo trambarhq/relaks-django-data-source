@@ -13,6 +13,7 @@ describe(`Invalidation methods`, function() {
     describe('#invalidate()', function() {
         it ('should mark all queries as expired when no criteria are provided', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne('/tasks/1/').then((object) => {
                 return dataSource.fetchList('/tasks/').then((list) => {
                     var result = dataSource.invalidate();
@@ -28,6 +29,7 @@ describe(`Invalidation methods`, function() {
         })
         it ('should mark queries conducted before a given time', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne('/tasks/1/').then((object) => {
                 return dataSource.fetchPage('/tasks/', 3).then((page) => {
                     var time = new Date;
@@ -43,6 +45,7 @@ describe(`Invalidation methods`, function() {
         })
         it ('should ignore queries conducted after a given time', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne('/tasks/1/').then((object) => {
                 return dataSource.fetchPage('/tasks/', 3).then((page) => {
                     var time = new Date((new Date).getTime() - 60000);
@@ -55,6 +58,7 @@ describe(`Invalidation methods`, function() {
         })
         it ('should cause page queries to be removed from cache momentarily', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage('/tasks/', 2).then((page2) => {
                 return dataSource.fetchPage('/tasks/', 3).then((page3) => {
                     var result = dataSource.invalidate();
@@ -76,6 +80,7 @@ describe(`Invalidation methods`, function() {
     describe('#invalidateOne()', function() {
         it ('should mark a single object query as expired', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne('/tasks/1/').then((object1) => {
                 return dataSource.fetchOne('/tasks/2/').then((object2) => {
                     // leaving one trailing slash on purpose
@@ -92,6 +97,7 @@ describe(`Invalidation methods`, function() {
     describe('#invalidateList()', function() {
         it ('should mark a single list query as expired', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterUpdate: 'replace' };
             return dataSource.fetchList('/tasks/', options).then((object1) => {
                 var result = dataSource.invalidateList('/tasks/', options);
@@ -104,6 +110,7 @@ describe(`Invalidation methods`, function() {
     describe('#invalidatePage()', function() {
         it ('should mark a single page query as expired', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchPage('/tasks/', 2).then((object1) => {
                 var result1 = dataSource.invalidatePage('/tasks/', 1);
                 expect(result1).to.be.false;
@@ -117,6 +124,7 @@ describe(`Invalidation methods`, function() {
     describe('#invalidateMultiple()', function() {
         it ('should mark multiple object queries as expired', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchOne('/tasks/1/').then((object1) => {
                 return dataSource.fetchOne('/tasks/2/').then((object2) => {
                     var urls = [ '/tasks/1/', '/tasks/2/' ];

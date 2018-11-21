@@ -11,6 +11,7 @@ var defaultOptions = {
 function RelaksDjangoDataSource(options) {
     EventEmitter.call(this);
     this.active = false;
+    this.activationPromise = null;
     this.queries = [];
     this.authentications = [];
     this.authorizations = [];
@@ -31,8 +32,14 @@ var prototype = RelaksDjangoDataSource.prototype = Object.create(EventEmitter.pr
  */
 prototype.activate = function() {
     if (!this.active) {
-        this.startExpirationCheck();
         this.active = true;
+        if (this.activationPromise) {
+            var resolve = this.activationPromise.resolve;
+            this.activationPromise = null;
+            resolve();
+        }
+        this.startExpirationCheck();
+        this.checkExpiration();
     }
 };
 
@@ -1629,7 +1636,7 @@ prototype.delete = function(url) {
  */
 prototype.request = function(url, options, waitForAuthentication) {
     var _this = this;
-    return fetch(url, options).then(function(response) {
+    return this.fetch(url, options).then(function(response) {
         if (response.status < 400) {
             if (response.status == 204) {
                 return null;
@@ -1648,6 +1655,50 @@ prototype.request = function(url, options, waitForAuthentication) {
             throw new RelaksDjangoDataSourceError(response.status, response.statusText);
         }
     });
+};
+
+/**
+ * Wait for active to become true then run fetch()
+ *
+ * @type {Promise<Response>}
+ */
+prototype.fetch = function(url, options) {
+    return this.waitForActivation().then(() => {
+        return fetch(url, options).catch((err) => {
+            // try again if the data source was deactivated in the middle of
+            // an operation
+            if (!this.active) {
+                return this.fetch(url, options);
+            } else {
+                throw err;
+            }
+        });
+    });
+};
+
+/**
+ * If this.active is false, wait for it to become true
+ *
+ * @return {Promise}
+ */
+prototype.waitForActivation = function() {
+    if (this.active) {
+        return Promise.resolve();
+    }
+    if (!this.activationPromise) {
+        var r1, r2;
+        this.activationPromise = new Promise((resolve, reject) => {
+            r1 = resolve;
+            r2 = reject;
+        });
+        this.activationPromise.resolve = r1;
+        this.activationPromise.reject = r2;
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('Waiting for activate() to be called...');
+        }
+    }
+    return this.activationPromise;
 };
 
 /**

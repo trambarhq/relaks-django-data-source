@@ -14,6 +14,7 @@ describe('Update methods:', function() {
         describe('(numeric keys)', function() {
             it ('should update an object', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 // omitting trailing slash on purpose
                 return dataSource.fetchOne('/tasks/6').then((object) => {
                     object = Object.assign({}, object, { category: 'religion' });
@@ -35,6 +36,7 @@ describe('Update methods:', function() {
             })
             it ('should fail with status code 404 when object does not exist', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 var deletedObject = {
                     id: 101
                 };
@@ -53,6 +55,7 @@ describe('Update methods:', function() {
 
             it ('should update an object', function() {
                 var dataSource = new DjangoDataSource({ baseURL });
+                dataSource.activate();
                 return dataSource.fetchOne('/tasks/6').then((object) => {
                     object.category = 'religion';
                     return dataSource.updateOne(object).then((updatedObject) => {
@@ -69,6 +72,7 @@ describe('Update methods:', function() {
 
         it ('should replace objects in list query afterward when "replace" is specified', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterUpdate: 'replace' };
             return dataSource.fetchList('/tasks/', options).then((objects) => {
                 var slice = objects.slice(0, 5).map((object) => {
@@ -86,6 +90,7 @@ describe('Update methods:', function() {
         })
         it ('should not trigger change event when "replace" is specified', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterUpdate: 'replace' };
             return dataSource.fetchList('/tasks/', options).then((objects) => {
                 var slice = objects.slice(0, 5).map((object) => {
@@ -100,6 +105,7 @@ describe('Update methods:', function() {
         })
         it ('should trigger refreshing of list query by default', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             return dataSource.fetchList('/tasks/').then((objects) => {
                 return new Promise((resolve, reject) => {
                     // promise will resolve when change event occurs
@@ -146,6 +152,7 @@ describe('Update methods:', function() {
         })
         it ('should fail with when one of the objects does not exist', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var objects = [
                 { id: 100, title: 'Dobchinsky' },
                 { id: 101, title: 'Bobchinsky' },
@@ -158,6 +165,7 @@ describe('Update methods:', function() {
         })
         it ('should force refresh when an error occurs', function() {
             var dataSource = new DjangoDataSource({ baseURL });
+            dataSource.activate();
             var options = { afterUpdate: 'replace' };
             return dataSource.fetchList('/tasks/', options).then((objects) => {
                 var missing = objects[3]
