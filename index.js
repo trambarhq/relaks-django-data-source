@@ -1256,7 +1256,7 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
     var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
-    var options = this.includeAuthorizationToken(allowAbsURLs[0], {
+    var options = this.includeToken(allowAbsURLs[0], {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
@@ -1375,7 +1375,7 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
     var _this = this;
     var logoutAbsURL = this.resolveURL(logoutURL);
     var denyAbsURLs = this.resolveURLs(denyURLs || [ '/' ]);
-    var options = this.includeAuthorizationToken(denyAbsURLs[0], {
+    var options = this.includeToken(denyAbsURLs[0], {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
@@ -1386,7 +1386,21 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
             denyURLs: denyAbsURLs,
         });
         _this.triggerEvent(deauthorizationEvent);
-        return deauthorizationEvent.waitForDecision();
+        return deauthorizationEvent.waitForDecision().then(() => {
+            var clearCachedQueries = !deauthorizationEvent.defaultPrevented;
+            if (clearCachedQueries) {
+                var changed = false;
+                _this.queries = _this.queries.filter(function(query) {
+                    if (matchAnyURL(query.url, denyAbsURLs)) {
+                        changed = true;
+                        return false;
+                    } else {
+                        return true;
+                    }
+                });
+                _this.notifyChanges(changed);
+            }
+        });
     });
 };
 
@@ -1397,7 +1411,7 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
  *
  * @return {String|undefined}
  */
-prototype.getAuthorizationToken = function(url) {
+prototype.getToken = function(url) {
     var token;
     this.authorizations.some(function(authorization) {
         if (matchAnyURL(url, authorization.allow)) {
@@ -1418,9 +1432,9 @@ prototype.getAuthorizationToken = function(url) {
  *
  * @return {Object}
  */
-prototype.includeAuthorizationToken = function(url, options) {
-    var token = this.getAuthorizationToken(url);
-    return this.attachAuthorizationToken(token, options);
+prototype.includeToken = function(url, options) {
+    var token = this.getToken(url);
+    return this.attachToken(token, options);
 }
 
 /**
@@ -1431,7 +1445,7 @@ prototype.includeAuthorizationToken = function(url, options) {
  *
  * @return {Object}
  */
-prototype.attachAuthorizationToken = function(token, options) {
+prototype.attachToken = function(token, options) {
     if (token) {
         var keyword = this.options.authorizationKeyword;
         if (!options) {
@@ -1527,7 +1541,7 @@ prototype.checkExpiration = function() {
  * @return {Promise<Object>}
  */
 prototype.get = function(url) {
-    var options = this.includeAuthorizationToken(url, {
+    var options = this.includeToken(url, {
         method: 'GET',
     });
     return this.request(url, options, true);
@@ -1542,7 +1556,7 @@ prototype.get = function(url) {
  * @return {Promise<Object>}
  */
 prototype.post = function(url, object) {
-    var options = this.includeAuthorizationToken(url, {
+    var options = this.includeToken(url, {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
@@ -1563,7 +1577,7 @@ prototype.post = function(url, object) {
  * @return {Promise<Object>}
  */
 prototype.put = function(url, object) {
-    var options = this.includeAuthorizationToken(url, {
+    var options = this.includeToken(url, {
         method: 'PUT',
         mode: 'cors',
         cache: 'no-cache',
@@ -1583,7 +1597,7 @@ prototype.put = function(url, object) {
  * @return {Promise<null>}
  */
 prototype.delete = function(url) {
-    var options = this.includeAuthorizationToken(url, {
+    var options = this.includeToken(url, {
         method: 'DELETE',
         mode: 'cors',
         cache: 'no-cache',
@@ -1611,7 +1625,7 @@ prototype.request = function(url, options, waitForAuthentication) {
         } else if (response.status === 401 && waitForAuthentication) {
             return _this.requestAuthentication(url).then(function(token) {
                 if (token) {
-                    _this.attachAuthorizationToken(token, options);
+                    _this.attachToken(token, options);
                     return _this.request(url, options, false);
                 } else {
                     throw new RelaksDjangoDataSourceError(response.status, response.statusText);
