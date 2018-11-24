@@ -102,6 +102,7 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 * [removeEventListener()](#removeeventlistener)
 
 **Activation**
+
 * [activate()](#activate)
 * [deactivate()](#deactivate)
 
