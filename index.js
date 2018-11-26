@@ -1511,12 +1511,13 @@ prototype.waitForResults = function(promises) {
  * Start expiration checking
  */
 prototype.startExpirationCheck = function() {
-    if (this.options.refreshInterval > 0) {
+    var refreshInterval = this.options.refreshInterval;
+    if (refreshInterval > 0) {
         if (!this.expirationCheckInterval) {
             var _this = this;
             this.expirationCheckInterval = setInterval(function() {
                 _this.checkExpiration();
-            }, 5000);
+            }, Math.min(100, refreshInterval / 10));
         }
     }
 };
