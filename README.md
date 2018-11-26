@@ -566,7 +566,7 @@ Wait for authentication to occur then try again.
 
 ### authorization
 
-An `authorization` event is emitted when the data source receives an authorization token, either from the server after a call to `authenticate()` or from your app via `authorize()`.
+An `authorization` event is emitted when the data source receives an authorization token, either from the server after a call to `authenticate()` or from your app via `authorize()`. A `change` event will follow if the default action is not prevented.
 
 **Default action:**
 
@@ -592,7 +592,7 @@ Generally, there's no reason to prevent the default behavior from happen. Doing 
 
 ### change
 
-A `change` event is emitted whenever rerunning queries might yield new result sets.
+A `change` event is emitted whenever rerunning queries might yield new result sets. It's also emitted after the data source has gained or lost autorization.
 
 **Properties:**
 
@@ -606,7 +606,7 @@ A `change` event is emitted whenever rerunning queries might yield new result se
 
 ### deauthorization
 
-A `deauthorization` event is emitted after `revokeAuthorization()` has logged out from a Django server.
+A `deauthorization` event is emitted after `revokeAuthorization()` has logged out from a Django server. A `change` event will follow even if the default action is prevented.
 
 **Default action:**
 

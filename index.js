@@ -1339,6 +1339,7 @@ prototype.authorize = function(token, allowURLs, fresh) {
                     return true;
                 }
             });
+            _this.notifyChanges();
         }
         return acceptable;
     });
@@ -1409,17 +1410,11 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
         return deauthorizationEvent.waitForDecision().then(() => {
             var clearCachedQueries = !deauthorizationEvent.defaultPrevented;
             if (clearCachedQueries) {
-                var changed = false;
                 _this.queries = _this.queries.filter(function(query) {
-                    if (matchAnyURL(query.url, denyAbsURLs)) {
-                        changed = true;
-                        return false;
-                    } else {
-                        return true;
-                    }
+                    return !matchAnyURL(query.url, denyAbsURLs);
                 });
-                _this.notifyChanges(changed);
             }
+            _this.notifyChanges();
         });
     });
 };
@@ -1646,7 +1641,7 @@ prototype.request = function(url, options, waitForAuthentication) {
             return _this.requestAuthentication(url).then(function(token) {
                 if (token) {
                     _this.attachToken(token, options);
-                    return _this.request(url, options, false);
+                    return _this.request(url, options, true);
                 } else {
                     throw new RelaksDjangoDataSourceError(response.status, response.statusText);
                 }
