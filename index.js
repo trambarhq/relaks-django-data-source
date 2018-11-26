@@ -1276,7 +1276,7 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
     var _this = this;
     var loginAbsURL = this.resolveURL(loginURL);
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
-    var options = this.includeToken(allowAbsURLs[0], {
+    var options = {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
@@ -1284,8 +1284,8 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
             'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(credentials),
-    });
-    return this.request(loginAbsURL, options, false).then(function(response) {
+    };
+    return this.request(loginAbsURL, options, null, false).then(function(response) {
         var token = (response) ? response.key : null;
         if (!token) {
             throw new RelaksDjangoDataSourceError(403, 'No authorization token');
@@ -1305,6 +1305,14 @@ prototype.authenticate = function(loginURL, credentials, allowURLs) {
  */
 prototype.authorize = function(token, allowURLs, fresh) {
     var _this = this;
+    var invalid = !token || this.authorizations.some(function(authorization) {
+        if (authorization.token === token) {
+            return !authorization.invalid;
+        }
+    });
+    if (invalid) {
+        return Promise.resolve(false);
+    }
     var allowAbsURLs = this.resolveURLs(allowURLs || [ '/' ]);
     var authorizationEvent = new RelaksDjangoDataSourceEvent('authorization', this, {
         token: token,
@@ -1371,6 +1379,9 @@ prototype.cancelAuthentication = function(allowURLs) {
 prototype.cancelAuthorization = function(denyURLs) {
     var denyAbsURLs = this.resolveURLs(denyURLs || [ '/' ]);
     this.authorizations = this.authorizations.filter(function(authorization) {
+        if (authorization.invalid) {
+            return true;
+        }
         authorization.allow = authorization.allow.filter(function(url) {
             return (denyURLs.indexOf(url) === -1);
         });
@@ -1396,12 +1407,13 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
     var _this = this;
     var logoutAbsURL = this.resolveURL(logoutURL);
     var denyAbsURLs = this.resolveURLs(denyURLs || [ '/' ]);
-    var options = this.includeToken(denyAbsURLs[0], {
+    var token = this.getToken(denyAbsURLs[0]);
+    var options = {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
-    });
-    return this.request(logoutAbsURL, options, false).then(function() {
+    };
+    return this.request(logoutAbsURL, options, token, false).then(function() {
         _this.cancelAuthorization(denyAbsURLs);
         var deauthorizationEvent = new RelaksDjangoDataSourceEvent('deauthorization', this, {
             denyURLs: denyAbsURLs,
@@ -1429,6 +1441,9 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
 prototype.getToken = function(url) {
     var token;
     this.authorizations.some(function(authorization) {
+        if (authorization.invalid) {
+            return false;
+        }
         if (matchAnyURL(url, authorization.allow)) {
             if (!matchAnyURL(url, authorization.deny)) {
                 token = authorization.token;
@@ -1440,39 +1455,19 @@ prototype.getToken = function(url) {
 };
 
 /**
- * Get authorization token for URL and attach it to options for fetch()
- *
- * @param  {String} url
- * @param  {Object} options
- *
- * @return {Object}
- */
-prototype.includeToken = function(url, options) {
-    var token = this.getToken(url);
-    return this.attachToken(token, options);
-}
-
-/**
- * Attach authorization token to options for fetch()
+ * Mark authorization token as invalid
  *
  * @param  {String} token
- * @param  {Object} options
- *
- * @return {Object}
  */
-prototype.attachToken = function(token, options) {
+prototype.invalidateToken = function(token) {
     if (token) {
-        var keyword = this.options.authorizationKeyword;
-        if (!options) {
-            options = {};
-        }
-        if (!options.headers) {
-            options.headers = {};
-        }
-        options.headers['Authorization'] = keyword + ' ' + token;
+        this.authorizations.forEach(function(authorization) {
+            if (authorization.token === token) {
+                authorization.invalud = true;
+            }
+        });
     }
-    return options;
-}
+};
 
 prototype.waitForResults = function(promises) {
     var _this = this;
@@ -1556,10 +1551,11 @@ prototype.checkExpiration = function() {
  * @return {Promise<Object>}
  */
 prototype.get = function(url) {
-    var options = this.includeToken(url, {
+    var token = this.getToken(url);
+    var options = {
         method: 'GET',
-    });
-    return this.request(url, options, true);
+    };
+    return this.request(url, options, token, true);
 };
 
 /**
@@ -1571,7 +1567,8 @@ prototype.get = function(url) {
  * @return {Promise<Object>}
  */
 prototype.post = function(url, object) {
-    var options = this.includeToken(url, {
+    var token = this.getToken(url);
+    var options = {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
@@ -1579,8 +1576,8 @@ prototype.post = function(url, object) {
             'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(object),
-    });
-    return this.request(url, options, true);
+    };
+    return this.request(url, options, token, true);
 };
 
 /**
@@ -1592,7 +1589,8 @@ prototype.post = function(url, object) {
  * @return {Promise<Object>}
  */
 prototype.put = function(url, object) {
-    var options = this.includeToken(url, {
+    var token = this.getToken(url);
+    var options = {
         method: 'PUT',
         mode: 'cors',
         cache: 'no-cache',
@@ -1600,8 +1598,8 @@ prototype.put = function(url, object) {
             'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(object),
-    });
-    return this.request(url, options, true);
+    };
+    return this.request(url, options, token, true);
 };
 
 /**
@@ -1612,12 +1610,13 @@ prototype.put = function(url, object) {
  * @return {Promise<null>}
  */
 prototype.delete = function(url) {
-    var options = this.includeToken(url, {
+    var token = this.getToken(url);
+    var options = {
         method: 'DELETE',
         mode: 'cors',
         cache: 'no-cache',
-    });
-    return this.request(url, options, true);
+    };
+    return this.request(url, options, token, true);
 };
 
 /**
@@ -1625,29 +1624,44 @@ prototype.delete = function(url) {
  *
  * @param  {String} url
  * @param  {Object} options
+ * @param  {String|null} token
  * @param  {Boolean} waitForAuthentication
  *
  * @return {Promise}
  */
-prototype.request = function(url, options, waitForAuthentication) {
+prototype.request = function(url, options, token, waitForAuthentication) {
     var _this = this;
+    if (token) {
+        var keyword = this.options.authorizationKeyword;
+        if (!options) {
+            options = {};
+        }
+        if (!options.headers) {
+            options.headers = {};
+        }
+        options.headers['Authorization'] = keyword + ' ' + token;
+    }
     return this.fetch(url, options).then(function(response) {
         if (response.status < 400) {
             if (response.status == 204) {
                 return null;
             }
             return response.json();
-        } else if (response.status === 401 && waitForAuthentication) {
-            return _this.requestAuthentication(url).then(function(token) {
-                if (token) {
-                    _this.attachToken(token, options);
-                    return _this.request(url, options, true);
-                } else {
-                    throw new RelaksDjangoDataSourceError(response.status, response.statusText);
-                }
-            });
         } else {
-            throw new RelaksDjangoDataSourceError(response.status, response.statusText);
+            if (response.status === 401 || response.status === 403) {
+                _this.invalidateToken(token);
+            }
+            if (response.status === 401 && waitForAuthentication) {
+                return _this.requestAuthentication(url).then(function(newToken) {
+                    if (newToken) {
+                        return _this.request(url, options, newToken, true);
+                    } else {
+                        throw new RelaksDjangoDataSourceError(response.status, response.statusText);
+                    }
+                });
+            } else {
+                throw new RelaksDjangoDataSourceError(response.status, response.statusText);
+            }
         }
     });
 };

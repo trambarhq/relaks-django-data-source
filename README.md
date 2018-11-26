@@ -384,6 +384,8 @@ async function authorize(token: string, allowURLs?: string[], fresh?: boolean): 
 
 Provide a Django authorization token to the data source, likely one that was saved from an earlier authentication. `allowURLs` indicates the scope of access. It can typically be omitted. `fresh` indicates whether the token was just obtained from the remote server. If omitted, `evt.fresh` will be `false` in the subsequent `authorization` event. Your code can then elect not to save the token again.
 
+The method will return a promise that immediately resolves to `false` if `token` is empty or if the data source has previously encountered a 401 or 403 error using that token.
+
 ### cancelAuthentication
 
 ```typescript
