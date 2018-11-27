@@ -88,6 +88,10 @@ The default matches what the Django REST Framework's [TokenAuthentication scheme
 
 The base URL of the remote server. It'll be added to any URL that isn't absolute.
 
+### fetchFunc
+
+An alternative function to be used in place of the browser's built-in `fetch()`. 
+
 ### refreshInterval
 
 The amount of time, in milliseconds, to wait before rerunning data queries to ensure freshness. The data source caches all queries. When a query matches one that was performed before, the results obtained earlier will be returned immediately. If the amount of time elapsed since exceeds `refreshInterval`, the data source will rerun the query. If the results differ in anyway, a `change` event will occur.

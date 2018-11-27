@@ -6,6 +6,7 @@ var defaultOptions = {
     refreshInterval: 0,
     authorizationKeyword: 'Token',
     abbreviatedFolderContents: false,
+    fetchFunc: null,
 };
 
 function RelaksDjangoDataSource(options) {
@@ -1673,12 +1674,17 @@ prototype.request = function(url, options, token, waitForAuthentication) {
  * @type {Promise<Response>}
  */
 prototype.fetch = function(url, options) {
+    var _this = this;
     return this.waitForActivation().then(function() {
-        return fetch(url, options).catch(function(err) {
+        var f = _this.options.fetchFunc;
+        if (!f) {
+            f = fetch;
+        }
+        return f(url, options).catch(function(err) {
             // try again if the data source was deactivated in the middle of
             // an operation
-            if (!this.active) {
-                return this.fetch(url, options);
+            if (!_this.active) {
+                return _this.fetch(url, options);
             } else {
                 throw err;
             }
