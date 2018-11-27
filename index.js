@@ -639,7 +639,7 @@ prototype.insertMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+        segregateResults(folderAbsURL, objects, outcome).forEach(function(op) {
             if (_this.runInsertHooks(op)) {
                 changed = true;
             }
@@ -695,7 +695,7 @@ prototype.updateMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+        segregateResults(folderAbsURL, objects, outcome).forEach(function(op) {
             if (_this.runUpdateHooks(op)) {
                 changed = true;
             }
@@ -752,7 +752,7 @@ prototype.deleteMultiple = function(folderURL, objects) {
     });
     return this.waitForResults(promises).then(function(outcome) {
         var changed = false;
-        segregateResults(folderAbsURL, objects, outcome).forEach((op) => {
+        segregateResults(folderAbsURL, objects, outcome).forEach(function(op) {
             if (_this.runDeleteHooks(op)) {
                 changed = true;
             }
@@ -1419,7 +1419,7 @@ prototype.revokeAuthorization = function(logoutURL, denyURLs) {
             denyURLs: denyAbsURLs,
         });
         _this.triggerEvent(deauthorizationEvent);
-        return deauthorizationEvent.waitForDecision().then(() => {
+        return deauthorizationEvent.waitForDecision().then(function() {
             var clearCachedQueries = !deauthorizationEvent.defaultPrevented;
             if (clearCachedQueries) {
                 _this.queries = _this.queries.filter(function(query) {
@@ -1673,8 +1673,8 @@ prototype.request = function(url, options, token, waitForAuthentication) {
  * @type {Promise<Response>}
  */
 prototype.fetch = function(url, options) {
-    return this.waitForActivation().then(() => {
-        return fetch(url, options).catch((err) => {
+    return this.waitForActivation().then(function() {
+        return fetch(url, options).catch(function(err) {
             // try again if the data source was deactivated in the middle of
             // an operation
             if (!this.active) {
@@ -1697,7 +1697,7 @@ prototype.waitForActivation = function() {
     }
     if (!this.activationPromise) {
         var r1, r2;
-        this.activationPromise = new Promise((resolve, reject) => {
+        this.activationPromise = new Promise(function(resolve, reject) {
             r1 = resolve;
             r2 = reject;
         });
