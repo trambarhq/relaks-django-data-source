@@ -5,10 +5,10 @@
   "version": "0.0.12",
   "main": "./index.js",
   "preferGlobal": false,
-  "repository": "git://github.com/chung-leong/relaks-django-data-source.git",
-  "homepage": "https://github.com/chung-leong/relaks-django-data-source",
+  "repository": "git://github.com/trambarhq/relaks-django-data-source.git",
+  "homepage": "https://github.com/trambarhq/relaks-django-data-source",
   "bugs": {
-    "url": "http://github.com/chung-leong/relaks-django-data-source/issues"
+    "url": "http://github.com/trambarhq/relaks-django-data-source/issues"
   },
   "license": "MIT",
   "keywords": [

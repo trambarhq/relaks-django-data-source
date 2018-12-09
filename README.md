@@ -1,6 +1,6 @@
 Relaks Django Data Source
 -------------------------
-This module lets you access a Django server from a React app that use [Relaks](https://github.com/chung-leong/relaks). It's designed to work with the [Django REST framework](https://www.django-rest-framework.org/).
+This module lets you access a Django server from a React app that use [Relaks](https://github.com/trambarhq/relaks). It's designed to work with the [Django REST framework](https://www.django-rest-framework.org/).
 
 * [Installation](#installation)
 * [Usage](#usage)
@@ -57,7 +57,7 @@ class Application extends PureComponent {
 }
 ```
 
-Components are expected to access functionalities of the data source through a proxy object--`Database` in the sample code above. See the documentation of Relaks for an [explanation](https://github.com/chung-leong/relaks#proxy-objects). A [default implementation](https://github.com/chung-leong/relaks-django-data-source/blob/master/proxy.js) is provided for reference purpose. It's recommended that you create your own.
+Components are expected to access functionalities of the data source through a proxy object--`Database` in the sample code above. See the documentation of Relaks for an [explanation](https://github.com/trambarhq/relaks#proxy-objects). A [default implementation](https://github.com/trambarhq/relaks-django-data-source/blob/master/proxy.js) is provided for reference purpose. It's recommended that you create your own.
 
 ## Options
 
@@ -90,7 +90,7 @@ The base URL of the remote server. It'll be added to any URL that isn't absolute
 
 ### fetchFunc
 
-An alternative function to be used in place of the browser's built-in `fetch()`. 
+An alternative function to be used in place of the browser's built-in `fetch()`.
 
 ### refreshInterval
 
@@ -158,7 +158,7 @@ function addEventListener(name: string, handler: function, beginning?:boolean): 
 
 Attach an event listener to the data source. `handler` will be called whenever events of `type` occur. When `beginning` is true, the listener will be place before any existing listeners. It's otherwise added at the end of the list.
 
-Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-event-emitter).
+Inherited from [relaks-event-emitter](https://github.com/trambarhq/relaks-event-emitter).
 
 ### removeEventListener
 
@@ -168,7 +168,7 @@ function removeEventListener(name: string, handler: function): void
 
 Detach an event listener from the data source. `handler` and `type` must match what were given to `addEventListener()`.
 
-Inherited from [relaks-event-emitter](https://github.com/chung-leong/relaks-event-emitter).
+Inherited from [relaks-event-emitter](https://github.com/trambarhq/relaks-event-emitter).
 
 ### activate
 
@@ -634,9 +634,9 @@ Clear cache queries.
 
 ## Examples
 
-* [Starwars API: Episode V](https://github.com/chung-leong/relaks-starwars-example-sequel) - sequel to the first Starwars API example
-* [Starwars API: Episode VI - The Server Strikes Back](https://github.com/chung-leong/relaks-starwars-example-isomorphic) - demonstrates how to create an isomorphic app
-* [Django todo list](https://github.com/chung-leong/relaks-django-todo-example) - demonstrates authentication and data saving using [relaks-django-data-source](https://github.com/chung-leong/relaks-django-data-source)
+* [Starwars API: Episode V](https://github.com/trambarhq/relaks-starwars-example-sequel) - sequel to the first Starwars API example
+* [Starwars API: Episode VI - The Server Strikes Back](https://github.com/trambarhq/relaks-starwars-example-isomorphic) - demonstrates how to create an isomorphic app
+* [Django todo list](https://github.com/trambarhq/relaks-django-todo-example) - demonstrates authentication and data saving using [relaks-django-data-source](https://github.com/trambarhq/relaks-django-data-source)
 
 ## License
 
