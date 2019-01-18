@@ -47,6 +47,6 @@
     "webpack": "^3.0.1"
   },
   "dependencies": {
-    "relaks-event-emitter": "0.0.4"
+    "relaks-event-emitter": "0.0.6"
   }
 }

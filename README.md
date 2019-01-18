@@ -1,5 +1,5 @@
 Relaks Django Data Source
--------------------------
+=========================
 This module lets you access a Django server from a React app that use [Relaks](https://github.com/trambarhq/relaks). It's designed to work with the [Django REST framework](https://www.django-rest-framework.org/).
 
 * [Installation](#installation)
@@ -33,7 +33,7 @@ dataSource.activate();
 
 ```javascript
 /* Root-level React component */
-class Application extends PureComponent {
+class FrontEnd extends PureComponent {
     constructor(props) {
         super(props);
         let { dataSource } = props;
@@ -104,6 +104,7 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 
 * [addEventListener()](#addeventlistener)
 * [removeEventListener()](#removeeventlistener)
+* [waitForEvent()](#waitforevent)
 
 **Activation**
 
@@ -150,7 +151,7 @@ You can also manually flag queries as out-of-date by calling [invalidate()](#inv
 * [post()](#post)
 * [put()](#put)
 
-### addEventListener
+### addEventListener()
 
 ```typescript
 function addEventListener(name: string, handler: function, beginning?:boolean): void
@@ -160,7 +161,7 @@ Attach an event listener to the data source. `handler` will be called whenever e
 
 Inherited from [relaks-event-emitter](https://github.com/trambarhq/relaks-event-emitter).
 
-### removeEventListener
+### removeEventListener()
 
 ```typescript
 function removeEventListener(name: string, handler: function): void
@@ -170,7 +171,17 @@ Detach an event listener from the data source. `handler` and `type` must match w
 
 Inherited from [relaks-event-emitter](https://github.com/trambarhq/relaks-event-emitter).
 
-### activate
+### waitForEvent()
+
+```typescript
+async function waitForEvent(type: string): Event
+```
+
+Return a promise that is fulfilled when an event of the specified type occurs.
+
+Inherited from [relaks-event-emitter](https://github.com/trambarhq/relaks-event-emitter).
+
+### activate()
 
 ```typescript
 function activate(): void
@@ -178,7 +189,7 @@ function activate(): void
 
 Activate the data source, allowing it to fetch data from a remote server.
 
-### deactivate
+### deactivate()
 
 ```typescript
 function deactivate(): void
@@ -188,7 +199,7 @@ Deactivate the data source, keeping it from performing data requests. Operations
 
 The data source will continue to return cached data after its deactivation.
 
-### fetchList
+### fetchList()
 
 ```typescript
 async function fetchList(url: string, options?: object): object[]
@@ -212,7 +223,7 @@ By default, `fetchList()` will return as soon as it has one page of results. Spe
 * `afterUpdate` - see [afterUpdate](#afterupdate) (default: "refresh")
 * `afterDelete` - see [afterDelete](#afterdelete) (default: "remove")
 
-### fetchMultiple
+### fetchMultiple()
 
 ```typescript
 async function fetchMultiple(urls: string[], options?: object): object[]
@@ -226,7 +237,7 @@ By default, the promise returned by `fetchMultiple()` is not fulfilled until eve
 
 * `minimum` - the minimum number of objects to fetch (default: all)
 
-### fetchOne
+### fetchOne()
 
 ```typescript
 async function fetchOne(url: string, options?: object): object
@@ -239,7 +250,7 @@ Fetch an object from the server. This method will check the results of calls to 
 * `afterUpdate` - see [afterUpdate](#afterupdate) (default: "replace")
 * `afterDelete` - see [afterDelete](#afterdelete) (default: "remove")
 
-### fetchPage
+### fetchPage()
 
 ```typescript
 async function fetchPage(url: string, page: number, options?: object): object[]
@@ -254,7 +265,7 @@ Fetch a single page of a directory listing. All objects will be returned if the 
 * `afterUpdate` - see [afterUpdate](#afterupdate) (default: `"refresh"`)
 * `afterDelete` - see [afterDelete](#afterdelete) (default: `"refresh"`)
 
-### invalidate
+### invalidate()
 
 ```typescript
 function invalidate(time: string): boolean
@@ -264,7 +275,7 @@ Flag matching data queries performed before the specified time as out-of-date. `
 
 The data source emits a `change` event when queries are invalidated.
 
-### invalidateList
+### invalidateList()
 
 ```typescript
 function invalidateList(url:string, options?: object): boolean
@@ -272,7 +283,7 @@ function invalidateList(url:string, options?: object): boolean
 
 Invalidate a query performed earlier using `fetchList()`.
 
-### invalidateMultiple
+### invalidateMultiple()
 
 ```typescript
 function invalidateMultiple(urls:string[], options?: object): boolean
@@ -280,7 +291,7 @@ function invalidateMultiple(urls:string[], options?: object): boolean
 
 Invalidate multiple queries performed earlier using `fetchOne()`.
 
-### invalidatePage
+### invalidatePage()
 
 ```typescript
 function invalidatePage(url:string, page: number, options?: object): boolean
@@ -288,7 +299,7 @@ function invalidatePage(url:string, page: number, options?: object): boolean
 
 Invalidate a query performed earlier using `fetchPage()`.
 
-### invalidateOne
+### invalidateOne()
 
 ```typescript
 function invalidateOne(url:string, options?: object): boolean
@@ -296,7 +307,7 @@ function invalidateOne(url:string, options?: object): boolean
 
 Invalidate a query performed earlier using `fetchOne()`.
 
-### deleteOne
+### deleteOne()
 
 ```typescript
 async function deleteOne(folderURL: string, object: object): object
@@ -310,7 +321,7 @@ Delete an object on the remote server. The `afterDelete` hooks of cached queries
 
 When URL keys are used, `folderURL` can be omitted (since the object contains its own URL).
 
-### deleteMultiple
+### deleteMultiple()
 
 ```typescript
 function deleteMultiple(folderURL: string, objects: object[]): object[]
@@ -324,7 +335,7 @@ Delete multiple objects on the remote server. The `afterDelete` hooks of cached 
 
 When URL keys are used, `folderURL` can be omitted (since the objects contain their own URLs).
 
-### insertOne
+### insertOne()
 
 ```typescript
 async function insertOne(folderURL: string, object: object): object
@@ -332,7 +343,7 @@ async function insertOne(folderURL: string, object: object): object
 
 Insert an object into a directory on the remote server. The `afterInsert` hooks of cached queries are invoked afterward. The inserted object will be available through `fetchOne()` immediately.
 
-### insertMultiple
+### insertMultiple()
 
 ```typescript
 async function  insertMultiple(folderURL: string, objects: object[]): object[]
@@ -340,7 +351,7 @@ async function  insertMultiple(folderURL: string, objects: object[]): object[]
 
 Insert multiple objects into a directory on the remote server. The `afterInsert` hooks of cached queries are invoked afterward. The inserted objects will be available through `fetchOne()` immediately.
 
-### updateOne
+### updateOne()
 
 ```typescript
 async function updateOne(folderURL: string, object: object): object
@@ -354,7 +365,7 @@ Update an object on the remote server. The `afterUpdate` hooks of cached queries
 
 When URL keys are used, `folderURL` can be omitted (since the object contains its own URL).
 
-### updateMultiple
+### updateMultiple()
 
 ```typescript
 function updateMultiple(folderURL: string, objects: object[]): object[]
@@ -368,7 +379,7 @@ Update multiple objects on the remote server. The `afterUpdate` hooks of cached 
 
 When URL keys are used, `folderURL` can be omitted (since the objects contain their own URLs).
 
-### authenticate
+### authenticate()
 
 ```typescript
 async function authenticate(loginURL: string, credentials: object, allowURLs?: string[]): boolean
@@ -380,7 +391,7 @@ The fulfillment value of this method is `true` when the login process succeeds. 
 
 An `authorization` event occurs when the data source acquire an authorization token. This give you a chance to save the token for use in a future session.
 
-### authorize
+### authorize()
 
 ```typescript
 async function authorize(token: string, allowURLs?: string[], fresh?: boolean): boolean
@@ -390,7 +401,7 @@ Provide a Django authorization token to the data source, likely one that was sav
 
 The method will return a promise that immediately resolves to `false` if `token` is empty or if the data source has previously encountered a 401 or 403 error using that token.
 
-### cancelAuthentication
+### cancelAuthentication()
 
 ```typescript
 function cancelAuthentication(allowURLs?: string[]): void
@@ -398,7 +409,7 @@ function cancelAuthentication(allowURLs?: string[]): void
 
 Tell the data source to stop waiting for authentication. Operations that had encountered the HTTP status code 401 will then fail.
 
-### cancelAuthorization
+### cancelAuthorization()
 
 ```typescript
 function cancelAuthorization(denyURLs?: string[]): void
@@ -408,7 +419,7 @@ Remove authorization to certain URLs. This can be used to force the user to auth
 
 This method does not trigger any event.
 
-### isAuthorized
+### isAuthorized()
 
 ```typescript
 function isAuthorized(url?: string): boolean
@@ -416,7 +427,7 @@ function isAuthorized(url?: string): boolean
 
 Return true if the data source has an authorization token for the identicated location. `url` can be omitted, in which case it defaults to `"/"`.
 
-### revokeAuthorization
+### revokeAuthorization()
 
 ```typescript
 function revokeAuthorization(logoutURL: string, denyURLs?: string[]): void
@@ -428,7 +439,7 @@ An `deauthorization` event will occur afterward. This give you a chance to remov
 
 A change event will also occur after the data source removed cached queries.
 
-### delete
+### delete()
 
 ```typescript
 async function delete(url: string): null
@@ -436,7 +447,7 @@ async function delete(url: string): null
 
 Low-level function that performs an HTTP DELETE operation.
 
-### get
+### get()
 
 ```typescript
 async function get(url: string): object
@@ -444,7 +455,7 @@ async function get(url: string): object
 
 Low-level function that performs an HTTP GET operation.
 
-### post
+### post()
 
 ```typescript
 async function post(url: string, object: object): object
@@ -452,7 +463,7 @@ async function post(url: string, object: object): object
 
 Low-level function that performs an HTTP POST operation.
 
-### put
+### put()
 
 ```typescript
 async function put(url: string, object: object): object
