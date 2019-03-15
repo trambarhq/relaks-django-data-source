@@ -226,7 +226,7 @@ describe('Fetch methods:', function() {
                 return dataSource.fetchList(`/tasks/`).then((objects1) => {
                     return objects1.more().then(function(objects2) {
                         expect(objects2).to.have.length(30);
-                        expect(changeEvent).to.be.an.object;
+                        expect(changeEvent).to.be.an('object');
 
                         return dataSource.fetchList(`/tasks/`).then((objects3) => {
                             expect(objects3).to.equal(objects2);
