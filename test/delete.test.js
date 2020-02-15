@@ -1,238 +1,187 @@
 import { expect } from 'chai';
-import TestServer from './lib/test-server';
-import DjangoDataSource from '../index';
+import TestServer from './lib/test-server.js';
+import DataSource from '../src/index.mjs';
 
-var port = 7777;
-var baseURL = `http://localhost:${port}/api`;
+const port = 7777;
+const baseURL = `http://localhost:${port}/api`;
 
 describe('Delete methods:', function() {
+  before(function() {
+    return TestServer.start(port);
+  })
+  describe('#deleteOne()', function() {
+    describe('(numeric keys)', function() {
+      it ('should delete an object', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const object = await dataSource.fetchOne('/tasks/55');
+        await dataSource.deleteOne('/tasks/', object);
+        const objects = await dataSource.fetchList('/tasks/');
+        expect(objects).to.have.length(99);
+        const result = objects.find(object => object.id === 55);
+        expect(result).to.be.undefined;
+      })
+      it ('should fail with status code 404 when object does not exist', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const deletedObject = {
+          id: 101
+        };
+        try {
+          await dataSource.deleteOne('/tasks/', deletedObject);
+          expect.fail();
+        } catch (err) {
+          expect(err).to.have.property('status', 404);
+        }
+      })
+    })
+    describe('(URL keys)', function() {
+      before(function() {
+        return TestServer.reset({ urlKeys: true });
+      })
+      it ('should delete an object', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const object = await dataSource.fetchOne('/tasks/55');
+        await dataSource.deleteOne(object);
+        const objects = await dataSource.fetchList('/tasks/');
+        expect(objects).to.have.length(99);
+        const result = objects.find(object => object.id === 55);
+        expect(result).to.be.undefined;
+      })
+    })
+  })
+  describe('#deleteMultiple()', function() {
     before(function() {
-        return TestServer.start(port);
+      return TestServer.reset();
     })
-
-    describe('#deleteOne()', function() {
-        describe('(numeric keys)', function() {
-            it ('should delete an object', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                return dataSource.fetchOne('/tasks/55').then((object) => {
-                    return dataSource.deleteOne('/tasks/', object).then(() => {
-                        return dataSource.fetchList('/tasks/').then((objects) => {
-                            expect(objects).to.have.length(99);
-                            var result = objects.find((object) => {
-                                return object.id === 55;
-                            });
-                            expect(result).to.be.undefined;
-                        });
-                    })
-                });
-            })
-
-            it ('should fail with status code 404 when object does not exist', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                var deletedObject = {
-                    id: 101
-                };
-                return dataSource.deleteOne('/tasks/', deletedObject).then((object) => {
-                    throw new Error('Operation should fail');
-                }, (err) => {
-                    expect(err).to.be.an.instanceof(Error);
-                    expect(err).to.have.property('status', 404);
-                })
-            })
-        })
-        describe('(URL keys)', function() {
-            before(function() {
-                return TestServer.reset({ urlKeys: true });
-            })
-
-            it ('should delete an object', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                return dataSource.fetchOne('/tasks/55').then((object) => {
-                    return dataSource.deleteOne(object).then(() => {
-                        return dataSource.fetchList('/tasks/').then((objects) => {
-                            expect(objects).to.have.length(99);
-                            var result = objects.find((object) => {
-                                return object.id === 55;
-                            });
-                            expect(result).to.be.undefined;
-                        });
-                    })
-                });
-            })
-        })
+    it ('should remove objects from list query by default', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const objects = await dataSource.fetchList('/tasks/');
+      const slice = objects.slice(0, 5);
+      const deletedObjects = await dataSource.deleteMultiple('/tasks/', slice);
+      expect(deletedObjects).to.have.length(5);
+      const objectsAfter = await dataSource.fetchList('/tasks/');
+      for (let deletedObject of deletedObjects) {
+        const found = objectsAfter.find(object => object.id === deletedObject.id);
+        expect(found).to.be.undefined;
+      }
     })
-    describe('#deleteMultiple()', function() {
-        before(function() {
-            return TestServer.reset();
-        })
-
-        it ('should remove objects from list query by default', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            return dataSource.fetchList('/tasks/').then((objects) => {
-                var slice = objects.slice(0, 5);
-                return dataSource.deleteMultiple('/tasks/', slice).then((deletedObjects) => {
-                    return dataSource.fetchList('/tasks/').then((objects) => {
-                        objects.forEach((object) => {
-                            deletedObjects.forEach((deletedObject) => {
-                                expect(object.id).to.not.equal(deletedObject.id);
-                            });
-                        });
-                    });
-                });
-            });
-        })
-
-        it ('should remove object query', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var urls = [ '/tasks/99', '/tasks/100' ];
-            return dataSource.fetchMultiple(urls).then((objects) => {
-                expect(objects).to.have.length(2);
-                return dataSource.deleteMultiple('/tasks/', objects).then((deletedObjects) => {
-                    return dataSource.fetchOne(urls[0]).then((object) => {
-                        throw new Error('Operation should fail');
-                    }, (err) => {
-                        expect(err).to.be.an.instanceof(Error);
-                        expect(err).to.have.property('status', 404);
-                    });
-                });
-            });
-        })
-        it ('should run custom hook function', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var options = {
-                afterDelete: (objects, deletedObjects) => {
-                    return objects.map((object) => {
-                        var deletedObject = deletedObjects.find((deletedObject) => {
-                            return (deletedObject.id === object.id);
-                        });
-                        if (deletedObject) {
-                            deletedObject.deleted = true;
-                            return deletedObject;
-                        } else {
-                            return object;
-                        }
-                    });
-                }
-            };
-            return dataSource.fetchList('/tasks/', options).then((objects) => {
-                var slice = objects.slice(0, 5);
-                return dataSource.deleteMultiple('/tasks/', slice).then((deletedObjects) => {
-                    return dataSource.fetchList('/tasks/', options).then((objects) => {
-                        var slice = objects.slice(0, 5);
-                        slice.forEach((object) => {
-                            expect(object).to.have.property('deleted', true);
-                        })
-                    });
-                });
-            });
-        })
-        it ('should not fire change event when query has "ignore" as hook', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var options = {
-                afterDelete: 'ignore'
-            };
-            return dataSource.fetchList('/tasks/', options).then((objects) => {
-                return new Promise((resolve, reject) => {
-                    dataSource.addEventListener('change', () => {
-                        reject(new Error('There should be no change event'));
-                    });
-
-                    var slice = objects.slice(0, 5);
-                    dataSource.deleteMultiple('/tasks/', slice).then(() => {
-                        setTimeout(resolve, 100);
-                    });
-                });
-            });
-        })
-        it ('should fail with when one of the objects does not exist', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var objects = [
-                { id: 50 },
-                { id: 501 },
-            ];
-            return expect(dataSource.deleteMultiple('/tasks/', objects))
-                .to.eventually.be.rejectedWith(Error)
-                .that.contains.keys('results', 'errors')
-                .that.satisfy((err) => !err.errors[0] && !!err.errors[1])
-                .that.satisfy((err) => !!err.results[0] && !err.results[1]);
-        })
-        it ('should force refresh when an error occurs', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            return dataSource.fetchList('/tasks/').then((objects) => {
-                var missing = objects[3]
-                var present = objects[4];
-                // remove object in backend
-                TestServer.remove(missing.id);
-                return new Promise((resolve, reject) => {
-                    dataSource.addEventListener('change', resolve);
-                    setTimeout(reject, 100);
-
-                    var slice = [ missing, present ];
-                    dataSource.deleteMultiple('/tasks/', slice);
-                });
-            }).then(() => {
-                expect(dataSource.isCached('/tasks/')).to.be.true;
-                expect(dataSource.isCached('/tasks/', true)).to.be.false;
-            });
-        })
-        describe('(pagination)', function() {
-            before(function() {
-                return TestServer.reset({ pagination: true });
-            })
-
-            it ('should force page query to refresh by default', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                var deletedObjects;
-                return dataSource.fetchPage('/tasks/', 2).then((objects) => {
-                    return new Promise((resolve, reject) => {
-                        // promise will resolve when change event occurs
-                        var onChange = () => {
-                            dataSource.removeEventListener('change', onChange);
-                            resolve();
-                        };
-                        dataSource.addEventListener('change', onChange);
-                        setTimeout(reject, 100);
-
-                        deletedObjects = objects.slice(0, 5);
-                        dataSource.deleteMultiple('/tasks/', deletedObjects);
-                    });
-                }).then(() => {
-                    return new Promise((resolve, reject) => {
-                        // wait for another change event
-                        var onChange = () => {
-                            dataSource.removeEventListener('change', onChange);
-                            resolve();
-                        };
-                        dataSource.addEventListener('change', onChange);
-                        setTimeout(reject, 100);
-
-                        // trigger the refreshing
-                        dataSource.fetchPage('/tasks/', 2);
-                    });
-                }).then(() => {
-                    return dataSource.fetchPage('/tasks/', 2).then((objects) => {
-                        objects.forEach((object) => {
-                            deletedObjects.forEach((deletedObject) => {
-                                expect(object.id).to.not.equal(deletedObject.id);
-                            });
-                        });
-                    });
-                });
-            })
-        });
+    it ('should remove object query', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const urls = [ '/tasks/99', '/tasks/100' ];
+      const objects = await dataSource.fetchMultiple(urls);
+      expect(objects).to.have.length(2);
+      const deletedObjects = await dataSource.deleteMultiple('/tasks/', objects);
+      expect(deletedObjects).to.have.length(2);
+      try {
+        await dataSource.fetchOne(urls[0]);
+        expect.fail();
+      } catch (err) {
+        expect(err).to.have.property('status', 404);
+      }
     })
-
-    after(function() {
-        return TestServer.stop();
+    it ('should run custom hook function', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const options = {
+        afterDelete: (objects, deletedObjects) => {
+          return objects.map((object) => {
+            const deletedObject = deletedObjects.find((deletedObject) => {
+              return (deletedObject.id === object.id);
+            });
+            if (deletedObject) {
+              deletedObject.deleted = true;
+              return deletedObject;
+            } else {
+              return object;
+            }
+          });
+        }
+      };
+      const objects = await dataSource.fetchList('/tasks/', options);
+      const slice = objects.slice(0, 5);
+      const deletedObjects = await dataSource.deleteMultiple('/tasks/', slice);
+      const objectsAfter = await dataSource.fetchList('/tasks/', options);
+      for (let object of objectsAfter.slice(0, 5)) {
+        expect(object).to.have.property('deleted', true);
+      }
     })
+    it ('should not fire change event when query has "ignore" as hook', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const options = {
+        afterDelete: 'ignore'
+      };
+      const objects = await dataSource.fetchList('/tasks/', options);
+      try {
+        const slice = objects.slice(0, 5);
+        dataSource.deleteMultiple('/tasks/', slice);
+        await dataSource.waitForEvent('change', 100);
+        expect.fail('unexpected change event');
+      } catch (err) {
+      }
+    })
+    it ('should fail with when one of the objects does not exist', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const objects = [
+        { id: 50 },
+        { id: 501 },
+      ];
+      try {
+        await dataSource.deleteMultiple('/tasks/', objects);
+        expect.fail();
+      } catch (err) {
+        expect(err).to.contain.keys('results', 'errors');
+        expect(err.errors[0]).to.be.null;
+        expect(err.errors[1]).to.be.instanceof(Error);
+        expect(err.results[0]).to.not.be.null;
+        expect(err.results[1]).to.be.null;
+      }
+    })
+    it ('should force refresh when an error occurs', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const objects = await dataSource.fetchList('/tasks/');
+      const missing = objects[3]
+      const present = objects[4];
+      // remove object in backend
+      await TestServer.remove(missing.id);
+      dataSource.deleteMultiple('/tasks/', [ missing, present ]);
+      await dataSource.waitForEvent('change', 100);
+      // query should be cached but expired
+      expect(dataSource.isCached('/tasks/')).to.be.true;
+      expect(dataSource.isCached('/tasks/', true)).to.be.false;
+    })
+    describe('(pagination)', function() {
+      before(function() {
+        return TestServer.reset({ pagination: true });
+      })
+      it ('should force page query to refresh by default', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const objects = await dataSource.fetchPage('/tasks/', 2);
+        const deletedObjects = objects.slice(0, 5);
+        dataSource.deleteMultiple('/tasks/', deletedObjects);
+        await dataSource.waitForEvent('change', 100);
+
+        // trigger the refreshing
+        dataSource.fetchPage('/tasks/', 2);
+        // wait for another change event (after list is refreshed)
+        await dataSource.waitForEvent('change', 100);
+
+        const objectsAfterRefresh = await dataSource.fetchPage('/tasks/', 2);
+        for (let deletedObject of deletedObjects) {
+          const found = objectsAfterRefresh.find(object => object.id === deletedObject.id);
+          expect(found).to.be.undefined;
+        }
+      })
+    })
+  })
+  after(function() {
+    return TestServer.stop();
+  })
 })

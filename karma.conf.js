@@ -7,13 +7,15 @@ module.exports = function(config) {
     logLevel: config.LOG_WARNING,
     autoWatch: true,
     singleRun: false,
+    concurrency: 1,
     browsers: [ 'Chrome' ],
     frameworks: [ 'chai', 'mocha', 'server-side' ],
     files: [
       'tests.bundle.js',
     ],
-    concurrency: 1,
-
+    client: {
+      args: parseTestPattern(process.argv),
+    },
     preprocessors: {
       'tests.bundle.js': [ 'webpack', 'sourcemap' ]
     },
@@ -38,7 +40,12 @@ module.exports = function(config) {
             loader: 'babel-loader',
             exclude: Path.resolve('./node_modules'),
             query: {
-              presets: [ 'env' ]
+              presets: [
+                '@babel/env',
+              ],
+              plugins: [
+                '@babel/transform-runtime',
+              ]
             }
           }
         ]
@@ -51,3 +58,13 @@ module.exports = function(config) {
     },
   })
 };
+
+function parseTestPattern(argv) {
+  var index = argv.indexOf('--');
+  var patterns = (index !== -1) ? argv.slice(index + 1) : [];
+  if (patterns.length > 0) {
+    return [ '--grep' ].concat(patterns);
+  } else {
+    return [];
+  }
+}

@@ -12,6 +12,7 @@ const defaultOptions = {
 
 class RelaksDjangoDataSource extends EventEmitter {
   constructor(options) {
+    super();
     this.active = false;
     this.activationPromise = null;
     this.queries = [];
@@ -90,7 +91,7 @@ class RelaksDjangoDataSource extends EventEmitter {
    * @return {Array<String>}
    */
   resolveURLs(urls) {
-    return urls.map((url) => { this.resolveURL(url) });
+    return urls.map(url => this.resolveURL(url));
   }
 
 
@@ -624,7 +625,7 @@ class RelaksDjangoDataSource extends EventEmitter {
    */
   insertMultiple(folderURL, objects) {
     const folderAbsURL = this.resolveURL(folderURL);
-    const promises = objects.map((object) => { this.post(folderAbsURL, object) });
+    const promises = objects.map(object => this.post(folderAbsURL, object));
     return this.waitForResults(promises).then((outcome) => {
       let changed = false;
       const ops = segregateResults(folderAbsURL, objects, outcome);
@@ -762,7 +763,7 @@ class RelaksDjangoDataSource extends EventEmitter {
   runInsertHooks(op) {
     let changed = false;
     for (let query of this.queries) {
-      if (query !== op.query {
+      if (query !== op.query) {
         if (this.runInsertHook(query, op)) {
           changed = true;
         }
@@ -1316,7 +1317,7 @@ class RelaksDjangoDataSource extends EventEmitter {
     this.triggerEvent(authorizationEvent);
     return authorizationEvent.waitForDecision().then(() => {
       const acceptable = !authorizationEvent.defaultPrevented;
-      if (acceptable) {
+      if (!acceptable) {
         return false;
       }
       // remove previous authorization
@@ -1696,7 +1697,7 @@ class RelaksDjangoDataSource extends EventEmitter {
       return Promise.resolve();
     }
     if (!this.activationPromise) {
-      const resolve, reject;
+      let resolve, reject;
       this.activationPromise = new Promise((f1, f2) => {
         resolve = f1;
         reject = f2;
@@ -1724,7 +1725,7 @@ class RelaksDjangoDataSource extends EventEmitter {
  * @return {Boolean}
  */
 function runHook(query, hookName, input, defaultBehavior) {
-  const hookFunc = (query.options) ? query.options[hookName] : null;
+  let hookFunc = (query.options) ? query.options[hookName] : null;
   if (!hookFunc) {
     hookFunc = defaultBehavior;
   }
@@ -2167,7 +2168,7 @@ function matchURL(url, otherURL) {
  * @return {Boolean}
  */
 function matchAnyURL(url, otherURLs) {
-  return otherURLs.some((otherURL) => { matchURL(url, otherURL) });
+  return otherURLs.some(otherURL => matchURL(url, otherURL));
 }
 
 /**
@@ -2259,7 +2260,7 @@ function excludeObjects(list, objects) {
  */
 function cloneObject(src) {
   if (src instanceof Array) {
-    return src.map((obj) => { cloneObject(obj) });
+    return src.map(obj => cloneObject(obj));
   } else if (src instanceof Object) {
     const dst = {};
     for (let name in src) {
@@ -2474,7 +2475,7 @@ function getTime(delta) {
 }
 
 function pullObjects(list, objects) {
-  if (objects instaceof Array) {
+  if (objects instanceof Array) {
     for (let object of objects) {
       const index = list.indexOf(object);
       if (index !== -1) {
@@ -2486,4 +2487,5 @@ function pullObjects(list, objects) {
 
 export {
   RelaksDjangoDataSource,
+  RelaksDjangoDataSource as DataSource,
 };

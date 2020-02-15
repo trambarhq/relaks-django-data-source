@@ -1,192 +1,155 @@
 import { expect } from 'chai';
-import TestServer from './lib/test-server';
-import DjangoDataSource from '../index';
+import TestServer from './lib/test-server.js';
+import DataSource from '../src/index.mjs';
 
-var port = 7777;
-var baseURL = `http://localhost:${port}/api`;
+const port = 7777;
+const baseURL = `http://localhost:${port}/api`;
 
 describe('Update methods:', function() {
+  before(function() {
+    return TestServer.start(port);
+  })
+  describe('#updateOne()', function() {
+    describe('(numeric keys)', function() {
+      it ('should update an object', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        // omitting trailing slash on purpose
+        const object = await dataSource.fetchOne('/tasks/6');
+        const changedObject = { ...object, category: 'religion' };
+        const updatedObject = await dataSource.updateOne('/tasks/', changedObject);
+        expect(updatedObject).to.have.property('category', 'religion');
+
+        // this should be cached
+        const cachedObject = await dataSource.fetchOne('/tasks/6');
+        expect(cachedObject).to.have.property('category', 'religion');
+        expect(cachedObject).to.deep.equal(updatedObject);
+
+        // bypass cache and fetch object directly
+        const fetchedObject = await dataSource.get(`${baseURL}/tasks/6`);
+        expect(fetchedObject).to.have.property('category', 'religion');
+      })
+      it ('should fail with status code 404 when object does not exist', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const deletedObject = {
+          id: 101
+        };
+        try {
+          const object = await dataSource.updateOne('/tasks/', deletedObject);
+          expect.fail();
+        } catch (err) {
+          expect(err).to.have.property('status', 404);
+        }
+      })
+    })
+    describe('(URL keys)', function() {
+      before(function() {
+        return TestServer.reset({ urlKeys: true });
+      })
+      it ('should update an object', async function() {
+        const dataSource = new DataSource({ baseURL });
+        dataSource.activate();
+        const object = await dataSource.fetchOne('/tasks/6');
+        const changedObject = { ...object, category: 'religion' };
+        const updatedObject = await dataSource.updateOne(changedObject);
+        expect(updatedObject).to.have.property('category', 'religion');
+      })
+    })
+  })
+  describe('#updateMultiple()', function() {
     before(function() {
-        return TestServer.start(port);
+      return TestServer.reset();
     })
-
-    describe('#updateOne()', function() {
-        describe('(numeric keys)', function() {
-            it ('should update an object', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                // omitting trailing slash on purpose
-                return dataSource.fetchOne('/tasks/6').then((object) => {
-                    object = Object.assign({}, object, { category: 'religion' });
-                    return dataSource.updateOne('/tasks/', object).then((updatedObject) => {
-                        expect(updatedObject).to.have.property('category', 'religion');
-
-                        // this should be cached
-                        return dataSource.fetchOne('/tasks/6').then((cachedObject) => {
-                            expect(cachedObject).to.have.property('category', 'religion');
-                            expect(cachedObject).to.deep.equal(updatedObject);
-                        });
-                    })
-                }).then(() => {
-                    // bypass cache and fetch object directly
-                    return dataSource.get(`${baseURL}/tasks/6`).then((fetchedObject) => {
-                        expect(fetchedObject).to.have.property('category', 'religion');
-                    });
-                });
-            })
-            it ('should fail with status code 404 when object does not exist', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                var deletedObject = {
-                    id: 101
-                };
-                return dataSource.updateOne('/tasks/', deletedObject).then((object) => {
-                    throw new Error('Operation should fail');
-                }, (err) => {
-                    expect(err).to.be.an.instanceof(Error);
-                    expect(err).to.have.property('status', 404);
-                })
-            })
-        })
-        describe('(URL keys)', function() {
-            before(function() {
-                return TestServer.reset({ urlKeys: true });
-            })
-
-            it ('should update an object', function() {
-                var dataSource = new DjangoDataSource({ baseURL });
-                dataSource.activate();
-                return dataSource.fetchOne('/tasks/6').then((object) => {
-                    object.category = 'religion';
-                    return dataSource.updateOne(object).then((updatedObject) => {
-                        expect(updatedObject).to.have.property('category', 'religion');
-                    })
-                });
-            })
-        })
+    it ('should replace objects in list query afterward when "replace" is specified', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const options = { afterUpdate: 'replace' };
+      const objects = await dataSource.fetchList('/tasks/', options);
+      const changedObjects = objects.slice(0, 5).map((object) => {
+        return { ...object, category: 'religion' };
+      });
+      const updatedObjects = await dataSource.updateMultiple('/tasks/', changedObjects);
+      const objectsAfter = await dataSource.fetchList('/tasks/', options);
+      expect(objectsAfter.slice(0, 5)).to.eql(changedObjects);
     })
-    describe('#updateMultiple()', function() {
-        before(function() {
-            return TestServer.reset();
-        })
-
-        it ('should replace objects in list query afterward when "replace" is specified', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var options = { afterUpdate: 'replace' };
-            return dataSource.fetchList('/tasks/', options).then((objects) => {
-                var slice = objects.slice(0, 5).map((object) => {
-                    return Object.assign({}, object, { category: 'religion' });
-                });
-                return dataSource.updateMultiple('/tasks/', slice).then((updatedObjects) => {
-                    return dataSource.fetchList('/tasks/', options).then((objects) => {
-                        var slice = objects.slice(0, 5);
-                        slice.forEach((object, index) => {
-                            expect(object).to.equal(updatedObjects[index]);
-                        });
-                    });
-                });
-            });
-        })
-        it ('should not trigger change event when "replace" is specified', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var options = { afterUpdate: 'replace' };
-            return dataSource.fetchList('/tasks/', options).then((objects) => {
-                var slice = objects.slice(0, 5).map((object) => {
-                    return Object.assign({}, object, { category: 'religion' });
-                });
-                return new Promise((resolve, reject) => {
-                    dataSource.addEventListener('change', reject);
-                    setTimeout(resolve, 100);
-                    dataSource.updateMultiple('/tasks/', slice);
-                });
-            });
-        })
-        it ('should trigger refreshing of list query by default', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            return dataSource.fetchList('/tasks/').then((objects) => {
-                return new Promise((resolve, reject) => {
-                    // promise will resolve when change event occurs
-                    var onChange = () => {
-                        dataSource.removeEventListener('change', onChange);
-                        resolve();
-                    };
-                    dataSource.addEventListener('change', onChange);
-                    setTimeout(reject, 100);
-
-                    var slice = objects.slice(10, 15).map((object) => {
-                        return Object.assign({}, object, { category: 'religion' });
-                    });
-                    dataSource.updateMultiple('/tasks/', slice);
-                });
-            }).then(() => {
-                return new Promise((resolve, reject) => {
-                    // wait for another change event
-                    var onChange = () => {
-                        dataSource.removeEventListener('change', onChange);
-                        resolve();
-                    };
-                    dataSource.addEventListener('change', onChange);
-                    setTimeout(reject, 100);
-
-                    // trigger the refreshing
-                    dataSource.fetchList('/tasks/').then((objects) => {
-                        // we shouldn't see any changes yet
-                        var slice = objects.slice(10, 15);
-                        slice.forEach((object) => {
-                            expect(object).to.have.property('category', 'drinking');
-                        });
-                    });
-                });
-            }).then(() => {
-                return dataSource.fetchList('/tasks/').then((objects) => {
-                    // now the changes show up
-                    var slice = objects.slice(10, 15);
-                    slice.forEach((object) => {
-                        expect(object).to.have.property('category', 'religion');
-                    });
-                });
-            });
-        })
-        it ('should fail with when one of the objects does not exist', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var objects = [
-                { id: 100, title: 'Dobchinsky' },
-                { id: 101, title: 'Bobchinsky' },
-            ];
-            return expect(dataSource.updateMultiple('/tasks/', objects))
-                .to.eventually.be.rejectedWith(Error)
-                .that.contains.keys('results', 'errors')
-                .that.satisfy((err) => !err.errors[0] && !!err.errors[1])
-                .that.satisfy((err) => !!err.results[0] && !err.results[1]);
-        })
-        it ('should force refresh when an error occurs', function() {
-            var dataSource = new DjangoDataSource({ baseURL });
-            dataSource.activate();
-            var options = { afterUpdate: 'replace' };
-            return dataSource.fetchList('/tasks/', options).then((objects) => {
-                var missing = objects[3]
-                var present = objects[4];
-                // remove object in backend
-                TestServer.remove(missing.id);
-                return new Promise((resolve, reject) => {
-                    dataSource.addEventListener('change', resolve);
-                    setTimeout(reject, 100);
-
-                    var slice = [ missing, present ];
-                    dataSource.updateMultiple('/tasks/', slice);
-                });
-            }).then(() => {
-                expect(dataSource.isCached('/tasks/')).to.be.true;
-                expect(dataSource.isCached('/tasks/', true)).to.be.false;
-            });
-        })
-    });
-
-    after(function() {
-        return TestServer.stop();
+    it ('should not trigger change event when "replace" is specified', async function() {
+      const dataSource = new DataSource({ baseURL });
+      let changeEvent = null;
+      dataSource.activate();
+      dataSource.addEventListener('change', (evt) => {
+        changeEvent = evt;
+      });
+      const options = { afterUpdate: 'replace' };
+      const objects = await dataSource.fetchList('/tasks/', options);
+      const changedObjects = objects.slice(0, 5).map((object) => {
+        return { ...object, category: 'religion' };
+      });
+      await dataSource.updateMultiple('/tasks/', changedObjects);
+      expect(changeEvent).to.be.null;
     })
+    it ('should trigger refreshing of list query by default', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const objects = await dataSource.fetchList('/tasks/');
+      const changedObjects = objects.slice(10, 15).map((object) => {
+        return { ...object, category: 'religion' };
+      });
+      dataSource.updateMultiple('/tasks/', changedObjects);
+      await dataSource.waitForEvent('change', 100);
+
+      // trigger the refreshing
+      const objectsAfter = await dataSource.fetchList('/tasks/');
+      // we shouldn't see any changes yet
+      for (let object of objectsAfter.slice(10, 15)) {
+        expect(object).to.have.property('category', 'drinking');
+      }
+      // wait for another change event
+      await dataSource.waitForEvent('change', 100);
+
+      const objectsAfterRefresh = await dataSource.fetchList('/tasks/');
+      // now the changes show up
+      for (let object of objectsAfterRefresh.slice(10, 15)) {
+        expect(object).to.have.property('category', 'religion');
+      }
+    })
+    it ('should fail with when one of the objects does not exist', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const objects = [
+        { id: 100, title: 'Dobchinsky' },
+        { id: 101, title: 'Bobchinsky' },
+      ];
+      try {
+        await dataSource.updateMultiple('/tasks/', objects);
+      } catch (err) {
+        expect(err).to.contain.keys('results', 'errors');
+        expect(err.errors[0]).to.be.null;
+        expect(err.errors[1]).to.be.instanceof(Error);
+        expect(err.results[0]).to.not.be.null;
+        expect(err.results[1]).to.be.null;
+      }
+    })
+    it ('should force refresh when an error occurs', async function() {
+      const dataSource = new DataSource({ baseURL });
+      dataSource.activate();
+      const options = { afterUpdate: 'replace' };
+      const objects = await dataSource.fetchList('/tasks/', options);
+      const missing = objects[3]
+      const present = objects[4];
+
+      // remove object in backend
+      await TestServer.remove(missing.id);
+      const changedObjects = [ missing, present ];
+      dataSource.updateMultiple('/tasks/', changedObjects);
+      await dataSource.waitForEvent('change', 100);
+
+      // query is cached but expired
+      expect(dataSource.isCached('/tasks/')).to.be.true;
+      expect(dataSource.isCached('/tasks/', true)).to.be.false;
+    })
+  });
+  after(function() {
+    return TestServer.stop();
+  })
 })
