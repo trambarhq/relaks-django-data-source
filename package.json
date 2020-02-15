@@ -31,7 +31,7 @@
     "rollup:esm": "rollup -c rollup.config.esm.js"
   },
   "dependencies": {
-    "relaks-event-emitter": "2.0.6"
+    "relaks-event-emitter": "2.0.7"
   },
   "devDependencies": {
     "@babel/core": "^7.8.4",
