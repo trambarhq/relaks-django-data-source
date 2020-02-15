@@ -2,7 +2,7 @@
   "name": "relaks-django-data-source",
   "description": "Django data source for Relaks",
   "author": "Chung Leong",
-  "version": "0.0.13",
+  "version": "2.0.0",
   "main": "./index.js",
   "preferGlobal": false,
   "repository": "git://github.com/trambarhq/relaks-django-data-source.git",
@@ -23,30 +23,37 @@
   ],
   "scripts": {
     "test": "./node_modules/karma/bin/karma start --single-run",
-    "test:start": "./node_modules/karma/bin/karma start"
+    "test:start": "./node_modules/karma/bin/karma start",
+    "rollup": "npm run rollup:umd && npm run rollup:esm",
+    "rollup:umd": "rollup -c rollup.config.js",
+    "rollup:esm": "rollup -c rollup.config.esm.js"
+  },
+  "dependencies": {
+    "relaks-event-emitter": "2.0.4"
   },
   "devDependencies": {
-    "babel-core": "^6.26.3",
-    "babel-loader": "^7.1.5",
-    "babel-preset-env": "^1.7.0",
-    "body-parser": "^1.18.3",
+    "@babel/core": "^7.8.4",
+    "@babel/plugin-transform-runtime": "^7.8.3",
+    "@babel/preset-env": "^7.8.4",
+    "@babel/runtime": "^7.8.4",
+    "babel-loader": "^8.0.6",
+    "body-parser": "^1.19.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "cors": "^2.8.5",
-    "express": "^4.16.4",
-    "karma": "^4.0.1",
-    "karma-babel-preprocessor": "^7.0.0",
+    "express": "^4.17.1",
+    "karma": "^4.4.1",
+    "karma-babel-preprocessor": "^8.0.1",
     "karma-chai": "^0.1.0",
-    "karma-chrome-launcher": "^2.2.0",
+    "karma-chrome-launcher": "^3.1.0",
     "karma-mocha": "^1.3.0",
-    "karma-server-side": "^1.7.0",
+    "karma-server-side": "^1.8.0",
     "karma-sourcemap-loader": "^0.3.7",
-    "karma-webpack": "^3.0.5",
-    "lodash": "^4.17.11",
-    "mocha": "^6.0.2",
-    "webpack": "^4.29.6"
-  },
-  "dependencies": {
-    "relaks-event-emitter": "0.0.6"
+    "karma-webpack": "^4.0.2",
+    "lodash": "^4.17.15",
+    "mocha": "^7.0.1",
+    "rollup": "^1.31.1",
+    "rollup-plugin-babel": "^4.3.3",
+    "webpack": "^4.41.6"
   }
 }
