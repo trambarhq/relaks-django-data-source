@@ -506,6 +506,7 @@
     refreshInterval: 0,
     authorizationKeyword: 'Token',
     abbreviatedFolderContents: false,
+    forceHTTPS: true,
     fetchFunc: null
   };
 
@@ -602,6 +603,12 @@
           }
 
           url = removeTrailingSlash(baseURL) + addLeadingSlash(url);
+        }
+
+        if (this.options.forceHTTPS) {
+          if (baseURL && /^https:/.test(baseURL)) {
+            url = url.replace(/http:/, 'https:');
+          }
         }
 
         url = addTrailingSlash(url);
@@ -841,7 +848,7 @@
             query.objects = _objects;
             query.promise = nextPromise;
             query.nextPromise = null;
-            query.nextURL = response.next;
+            query.nextURL = _this6.resolveURL(response.next);
             query.nextPage = (query.nextPage || 1) + 1;
 
             if (initial) {
@@ -1177,7 +1184,7 @@
             var refreshNextPage = function refreshNextPage() {
               return _this10.get(nextURL).then(function (response) {
                 pageRemaining--;
-                nextURL = response.next;
+                nextURL = _this10.resolveURL(response.next);
 
                 if (pageRemaining === 0) {
                   // set query.nextURL to the URL given by the server

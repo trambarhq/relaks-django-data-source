@@ -7,6 +7,7 @@ const defaultOptions = {
   refreshInterval: 0,
   authorizationKeyword: 'Token',
   abbreviatedFolderContents: false,
+  forceHTTPS: true,
   fetchFunc: null,
 };
 
@@ -78,6 +79,11 @@ class RelaksDjangoDataSource extends EventEmitter {
         }
       }
       url = removeTrailingSlash(baseURL) + addLeadingSlash(url);
+    }
+    if (this.options.forceHTTPS) {
+      if (baseURL && /^https:/.test(baseURL)) {
+        url = url.replace(/http:/, 'https:');
+      }
     }
     url = addTrailingSlash(url);
     return url;
@@ -269,7 +275,7 @@ class RelaksDjangoDataSource extends EventEmitter {
         query.objects = objects;
         query.promise = nextPromise;
         query.nextPromise = null;
-        query.nextURL = response.next;
+        query.nextURL = this.resolveURL(response.next);
         query.nextPage = (query.nextPage || 1) + 1;
         if (initial) {
           query.time = time;
@@ -500,7 +506,7 @@ class RelaksDjangoDataSource extends EventEmitter {
         const refreshNextPage = () => {
           return this.get(nextURL).then((response) => {
             pageRemaining--;
-            nextURL = response.next;
+            nextURL = this.resolveURL(response.next);
             if (pageRemaining === 0) {
               // set query.nextURL to the URL given by the server
               // in the event that new pages have become available

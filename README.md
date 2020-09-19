@@ -64,6 +64,8 @@ Components are expected to access functionalities of the data source through a p
 * [abbreviatedFolderContents](#abbreviatedfoldercontents)
 * [authorizationKeyword](#authorizationkeyword)
 * [baseURL](#baseurl)
+* [fetchFunc](#fetchFunc)
+* [forceHTTPS](#forceHTTPS)
 * [refreshInterval](#refreshinterval)
 
 ### abbreviatedFolderContents
@@ -91,6 +93,10 @@ The base URL of the remote server. It'll be added to any URL that isn't absolute
 ### fetchFunc
 
 An alternative function to be used in place of the browser's built-in `fetch()`.
+
+### forceHTTPS
+
+Ensures HTTPS is used if `baseURL` starts with "https:". True by default.
 
 ### refreshInterval
 
